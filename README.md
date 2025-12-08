@@ -349,6 +349,39 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks fontsmooth=rgb
 - Subsequent starts take 10-30 seconds
 - This is normal Wine behavior
 
+### Issue 8: Cannot Save as PNG
+
+**Cause:** File format plugin issue in Wine
+
+**Solution:**
+```
+1. File > Save As
+2. Choose "PNG" from format dropdown
+3. If it fails, try: File > Export > Export As > PNG
+4. Alternative: Save as PSD, then use GIMP to export as PNG
+```
+
+### Issue 9: Screen Doesn't Update Immediately (Undo/Redo)
+
+**Cause:** Wine rendering lag
+
+**Solution:**
+- This is a known Wine limitation
+- Workaround: Force refresh with Ctrl+0 (fit to screen)
+- Or: Enable virtual desktop in winecfg
+
+### Issue 10: Zooming is Laggy
+
+**Cause:** GPU acceleration disabled + Wine overhead
+
+**Solution:**
+```
+1. Use keyboard shortcuts (Ctrl + / Ctrl -)
+2. Zoom with mouse wheel is slower than native
+3. This is expected behavior with Wine
+4. Performance is better on wine-staging
+```
+
 ---
 
 ## 🔧 Troubleshooting

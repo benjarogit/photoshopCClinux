@@ -264,6 +264,35 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks fontsmooth=rgb
 - Fenster schließen oder "Offline arbeiten" wählen
 - Photoshop funktioniert ohne Login
 
+### Problem 8: Kann nicht als PNG speichern
+
+**Ursache:** Dateiformat-Plugin-Problem in Wine
+
+**Lösung:**
+1. Datei > Speichern unter
+2. Wähle "PNG" aus Format-Dropdown
+3. Falls Fehler: Datei > Exportieren > Exportieren als > PNG
+4. Alternative: Als PSD speichern, dann mit GIMP als PNG exportieren
+
+### Problem 9: Bildschirm aktualisiert nicht sofort (Rückgängig/Wiederholen)
+
+**Ursache:** Wine Rendering-Verzögerung
+
+**Lösung:**
+- Dies ist eine bekannte Wine-Einschränkung
+- Workaround: Aktualisierung erzwingen mit Strg+0 (An Bildschirm anpassen)
+- Oder: Virtual Desktop in winecfg aktivieren
+
+### Problem 10: Zoom ist träge
+
+**Ursache:** GPU-Beschleunigung deaktiviert + Wine-Overhead
+
+**Lösung:**
+1. Verwende Tastenkürzel (Strg + / Strg -)
+2. Zoom mit Mausrad ist langsamer als nativ
+3. Dies ist erwartetes Verhalten mit Wine
+4. Performance ist besser mit wine-staging
+
 ## 🎥 Adobe Camera Raw installieren (Optional)
 
 Falls du RAW-Fotos bearbeiten möchtest:
