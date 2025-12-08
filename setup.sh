@@ -175,38 +175,45 @@ function exitScript() {
 }
 
 function banner() {
-    local banner_path="$PWD/images/banner.txt"
-    if [ -f $banner_path ];then 
-        clear && echo ""
-        
-        # Define menu options based on language
+    # Try colored banner first, fallback to text version
+    local banner_path="$PWD/images/banner"
+    local banner_txt="$PWD/images/banner.txt"
+    
+    clear && echo ""
+    
+    # Check if we have the colored banner (without {OPTION} placeholders)
+    if [ -f "$banner_path" ] && ! grep -q "{OPTION" "$banner_path" 2>/dev/null; then
+        # Use colored banner as-is (already has menu text)
+        cat "$banner_path"
+    elif [ -f "$banner_txt" ]; then
+        # Use text template with language support
+        # Define menu options based on language (max 70 chars after number)
         if [ "$LANG_CODE" = "de" ]; then
-            local opt1="1- Photoshop CC installieren                                  "
-            local opt2="2- Adobe Camera Raw v12 installieren                          "
-            local opt3="3- Virtuelles Laufwerk konfigurieren  (winecfg)              "
-            local opt4="4- Photoshop deinstallieren                                   "
-            local opt5="5- Beenden                                                    "
+            local opt1="1- Photoshop CC installieren                                 "
+            local opt2="2- Camera Raw v12 installieren                               "
+            local opt3="3- Wine konfigurieren              (winecfg)                 "
+            local opt4="4- Photoshop deinstallieren                                  "
+            local opt5="5- Beenden                                                   "
         else
             local opt1="1- Install photoshop CC                                      "
-            local opt2="2- Install adobe camera raw v12                              "
-            local opt3="3- configure virtual drive          (winecfg)                "
+            local opt2="2- Install camera raw v12                                    "
+            local opt3="3- configure wine                  (winecfg)                 "
             local opt4="4- uninstall photoshop                                       "
             local opt5="5- exit                                                      "
         fi
         
         # Display banner with language-specific options
-        cat $banner_path | sed \
+        cat "$banner_txt" | sed \
             -e "s/{OPTION1}/$opt1/" \
             -e "s/{OPTION2}/$opt2/" \
             -e "s/{OPTION3}/$opt3/" \
             -e "s/{OPTION4}/$opt4/" \
             -e "s/{OPTION5}/$opt5/"
-        
-        echo ""
     else
         msg_banner_not_found
     fi
-    unset banner_path
+    
+    echo ""
 }
 
 function error() {
