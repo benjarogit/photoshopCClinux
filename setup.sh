@@ -245,6 +245,9 @@ function toggle_internet() {
         return 1
     fi
     
+    # Temporary file to store disabled connections
+    local disabled_connections_file="/tmp/.photoshop_disabled_connections_$$"
+    
     # Check if any connection is active (exclude loopback)
     local active_connections=$(nmcli -t -f NAME,STATE connection show | grep ":activated" | cut -d: -f1 | grep -v "^lo$")
     
@@ -255,6 +258,9 @@ function toggle_internet() {
         else
             echo "Disabling all network connections..."
         fi
+        
+        # Save disabled connections to file for later restoration
+        echo "$active_connections" > "$disabled_connections_file"
         
         while IFS= read -r conn; do
             if [ -n "$conn" ]; then
@@ -280,20 +286,43 @@ function toggle_internet() {
             echo "Enabling network connections..."
         fi
         
-        # Re-enable all saved connections (exclude loopback)
-        local all_connections=$(nmcli -t -f NAME connection show | grep -v "^lo$")
-        
-        while IFS= read -r conn; do
-            if [ -n "$conn" ]; then
-                nmcli connection up "$conn" &> /dev/null && {
+        # Re-enable only the connections that were previously disabled
+        if [ -f "$disabled_connections_file" ]; then
+            local connections_to_restore=$(cat "$disabled_connections_file")
+            
+            while IFS= read -r conn; do
+                if [ -n "$conn" ]; then
+                    nmcli connection up "$conn" &> /dev/null && {
+                        if [ "$LANG_CODE" = "de" ]; then
+                            echo "  ✓ $conn aktiviert"
+                        else
+                            echo "  ✓ $conn enabled"
+                        fi
+                    }
+                fi
+            done <<< "$connections_to_restore"
+            
+            # Clean up temp file
+            rm -f "$disabled_connections_file"
+        else
+            # Fallback: if no saved state, try to enable the first active ethernet/wifi connection
+            if [ "$LANG_CODE" = "de" ]; then
+                echo "  (Keine gespeicherten Verbindungen - verwende Fallback)"
+            else
+                echo "  (No saved connections - using fallback)"
+            fi
+            
+            local fallback_conn=$(nmcli -t -f NAME,TYPE connection show | grep -E ":(ethernet|wifi|802-" | head -1 | cut -d: -f1)
+            if [ -n "$fallback_conn" ]; then
+                nmcli connection up "$fallback_conn" &> /dev/null && {
                     if [ "$LANG_CODE" = "de" ]; then
-                        echo "  ✓ $conn aktiviert"
+                        echo "  ✓ $fallback_conn aktiviert"
                     else
-                        echo "  ✓ $conn enabled"
+                        echo "  ✓ $fallback_conn enabled"
                     fi
                 }
             fi
-        done <<< "$all_connections"
+        fi
         
         if [ "$LANG_CODE" = "de" ]; then
             echo -e "\n\033[1;32m✓\033[0m Verbindungen wiederhergestellt"
