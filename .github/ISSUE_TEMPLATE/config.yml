@@ -1,0 +1,15 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Documentation
+    url: https://github.com/benjarogit/photoshopCClinux/blob/main/README.md
+    about: Read the full installation and troubleshooting guide
+  - name: 🇩🇪 Deutsche Dokumentation
+    url: https://github.com/benjarogit/photoshopCClinux/blob/main/README.de.md
+    about: Deutsche Installations- und Fehlerbehebungsanleitung
+  - name: 🔧 Troubleshooting Script
+    url: https://github.com/benjarogit/photoshopCClinux/blob/main/troubleshoot.sh
+    about: Run ./troubleshoot.sh for automatic diagnostics
+  - name: 🐛 Original Project Issues
+    url: https://github.com/Gictorbit/photoshopCClinux/issues
+    about: Check if your issue was already solved in the original project
+
