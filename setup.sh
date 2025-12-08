@@ -235,27 +235,70 @@ function toggle_internet() {
     if ! command -v nmcli &> /dev/null; then
         if [ "$LANG_CODE" = "de" ]; then
             warning "nmcli nicht gefunden - kann Internet nicht umschalten"
-            echo "Manuell: nmcli radio wifi off/on"
+            echo "Manuell alle Verbindungen auflisten: nmcli connection show"
+            echo "Manuell deaktivieren: nmcli connection down <name>"
         else
             warning "nmcli not found - cannot toggle internet"
-            echo "Manual: nmcli radio wifi off/on"
+            echo "Manual list connections: nmcli connection show"
+            echo "Manual disable: nmcli connection down <name>"
         fi
         return 1
     fi
     
-    if nmcli radio wifi | grep -q "enabled"; then
-        nmcli radio wifi off
+    # Check if any connection is active (exclude loopback)
+    local active_connections=$(nmcli -t -f NAME,STATE connection show | grep ":activated" | cut -d: -f1 | grep -v "^lo$")
+    
+    if [ -n "$active_connections" ]; then
+        # Internet is ON - turn it OFF
         if [ "$LANG_CODE" = "de" ]; then
-            echo -e "\033[1;32m✓\033[0m Internet deaktiviert (PERFEKT für Installation!)"
+            echo "Deaktiviere alle Netzwerkverbindungen..."
         else
-            echo -e "\033[1;32m✓\033[0m Internet disabled (PERFECT for installation!)"
+            echo "Disabling all network connections..."
+        fi
+        
+        while IFS= read -r conn; do
+            if [ -n "$conn" ]; then
+                nmcli connection down "$conn" &> /dev/null
+                if [ "$LANG_CODE" = "de" ]; then
+                    echo "  ✓ $conn deaktiviert"
+                else
+                    echo "  ✓ $conn disabled"
+                fi
+            fi
+        done <<< "$active_connections"
+        
+        if [ "$LANG_CODE" = "de" ]; then
+            echo -e "\n\033[1;32m✓\033[0m Alle Verbindungen deaktiviert (PERFEKT für Installation!)"
+        else
+            echo -e "\n\033[1;32m✓\033[0m All connections disabled (PERFECT for installation!)"
         fi
     else
-        nmcli radio wifi on
+        # Internet is OFF - turn it ON
         if [ "$LANG_CODE" = "de" ]; then
-            echo -e "\033[1;32m✓\033[0m Internet aktiviert"
+            echo "Aktiviere Netzwerkverbindungen..."
         else
-            echo -e "\033[1;32m✓\033[0m Internet enabled"
+            echo "Enabling network connections..."
+        fi
+        
+        # Re-enable all saved connections
+        local all_connections=$(nmcli -t -f NAME connection show | head -5)
+        
+        while IFS= read -r conn; do
+            if [ -n "$conn" ]; then
+                nmcli connection up "$conn" &> /dev/null && {
+                    if [ "$LANG_CODE" = "de" ]; then
+                        echo "  ✓ $conn aktiviert"
+                    else
+                        echo "  ✓ $conn enabled"
+                    fi
+                }
+            fi
+        done <<< "$all_connections"
+        
+        if [ "$LANG_CODE" = "de" ]; then
+            echo -e "\n\033[1;32m✓\033[0m Verbindungen wiederhergestellt"
+        else
+            echo -e "\n\033[1;32m✓\033[0m Connections restored"
         fi
     fi
 }
@@ -342,10 +385,11 @@ function banner() {
     local copyright="© ${start_year}-${current_year} benjarogit | GPL-3.0 License"
     
     # Define menu options based on language
-    # Check internet status for menu display
+    # Check internet status for menu display (check all connections except loopback)
     local internet_status=""
     if command -v nmcli &> /dev/null; then
-        if nmcli radio wifi | grep -q "enabled"; then
+        local active_connections=$(nmcli -t -f NAME,STATE connection show | grep ":activated" | cut -d: -f1 | grep -v "^lo$" | wc -l)
+        if [ "$active_connections" -gt 0 ]; then
             internet_status="ON "
         else
             internet_status="OFF"

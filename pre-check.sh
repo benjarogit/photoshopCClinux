@@ -153,7 +153,35 @@ echo "6. Überprüfe Internet-Verbindung..."
 if ping -c 1 -W 2 google.com &> /dev/null; then
     check_warning "Internet-Verbindung aktiv"
     echo -e "   ${YELLOW}EMPFEHLUNG: Deaktiviere Internet für die Installation!${NC}"
-    echo "   Befehl: nmcli radio wifi off"
+    echo ""
+    
+    # Offer to disable internet now
+    if command -v nmcli &> /dev/null; then
+        echo -e "   ${BLUE}Möchtest du alle Netzwerkverbindungen JETZT deaktivieren? [J/n]${NC}"
+        read -p "   Deine Wahl: " -n 1 -r
+        echo ""
+        
+        if [[ $REPLY =~ ^[JjYy]$ ]] || [[ -z $REPLY ]]; then
+            echo "   Deaktiviere Verbindungen..."
+            local active_connections=$(nmcli -t -f NAME,STATE connection show | grep ":activated" | cut -d: -f1 | grep -v "^lo$")
+            
+            if [ -n "$active_connections" ]; then
+                while IFS= read -r conn; do
+                    if [ -n "$conn" ]; then
+                        nmcli connection down "$conn" &> /dev/null
+                        echo "     ✓ $conn deaktiviert"
+                    fi
+                done <<< "$active_connections"
+                echo ""
+                check_ok "Alle Verbindungen deaktiviert (PERFEKT!)"
+            fi
+        else
+            echo -e "   ${YELLOW}Übersprungen - Bitte vor Installation manuell deaktivieren!${NC}"
+        fi
+    else
+        echo "   Manuell: nmcli connection show (Liste)"
+        echo "   Manuell: nmcli connection down <name> (Deaktivieren)"
+    fi
 else
     check_ok "Keine Internet-Verbindung (PERFEKT für Installation!)"
 fi
