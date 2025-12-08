@@ -245,8 +245,8 @@ function toggle_internet() {
         return 1
     fi
     
-    # Temporary file to store disabled connections
-    local disabled_connections_file="/tmp/.photoshop_disabled_connections_$$"
+    # Temporary file to store disabled connections (fixed name, not PID-dependent)
+    local disabled_connections_file="/tmp/.photoshop_disabled_connections"
     
     # Check if any connection is active (exclude loopback)
     local active_connections=$(nmcli -t -f NAME,STATE connection show | grep ":activated" | cut -d: -f1 | grep -v "^lo$")

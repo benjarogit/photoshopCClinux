@@ -166,6 +166,9 @@ if ping -c 1 -W 2 google.com &> /dev/null; then
             active_connections=$(nmcli -t -f NAME,STATE connection show | grep ":activated" | cut -d: -f1 | grep -v "^lo$")
             
             if [ -n "$active_connections" ]; then
+                # Save disabled connections for later restoration (same file as setup.sh uses)
+                echo "$active_connections" > /tmp/.photoshop_disabled_connections
+                
                 while IFS= read -r conn; do
                     if [ -n "$conn" ]; then
                         nmcli connection down "$conn" &> /dev/null
