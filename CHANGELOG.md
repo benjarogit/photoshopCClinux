@@ -43,7 +43,7 @@ LC_ALL=C df -BG "$HOME" | awk 'NR==2 {print $4}'
 **Files Modified:**
 - `setup.sh` - `get_system_info()` function (RAM detection)
 - `pre-check.sh` - RAM, disk space, file size checks
-- `troubleshoot.sh` - Disk space check
+- `troubleshoot.sh` - RAM detection, disk space check
 
 **Locale Examples:**
 - 🇩🇪 German: `Speicher:` / `Dateisystem` → `Mem:` / `Filesystem`
