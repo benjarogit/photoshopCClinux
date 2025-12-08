@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
-
-# Photoshop CC Troubleshooting Script
-# Automatische Diagnose und Fehlerbehebung
+################################################################################
+# Photoshop CC Linux - Troubleshooting Script
+#
+# Description:
+#   Automatic diagnosis and troubleshooting for common Photoshop CC issues.
+#   Checks Wine configuration, installation integrity, and provides fixes.
+#
+# Author:       benjarogit
+# Repository:   https://github.com/benjarogit/photoshopCClinux
+# License:      GPL-3.0
+# Copyright:    (c) 2024 benjarogit
+################################################################################
 
 echo "═══════════════════════════════════════════════════════════════"
 echo "    Photoshop CC - Troubleshooting & Diagnose Tool"

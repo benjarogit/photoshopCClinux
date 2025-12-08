@@ -1,3 +1,163 @@
+# Release v2.0.5 - System Info Display & Integrated Tools
+
+## 🚀 Major Update: Enhanced User Experience & System Integration
+
+This release adds **real-time system information display**, integrates **pre-check and troubleshooting tools** directly into the setup menu, and implements **dynamic copyright year detection**.
+
+### What's New
+
+#### System Information Display
+- ✅ **Real-Time System Info** - Banner now displays: Distribution, Kernel version, RAM, Wine version
+- ✅ **Smart Truncation** - Long distribution names are automatically truncated to fit
+- ✅ **Dynamic Padding** - System info line adapts to content length
+- ✅ **Fallback Support** - Graceful handling when system info is unavailable
+
+#### Integrated Tools (New Menu Options)
+- ✅ **Option 3: Pre-Installation Check** - Validates system requirements before installation (highlighted in green)
+- ✅ **Option 4: Troubleshooting** - Automatic diagnosis and fixes for common issues (highlighted in green)
+- ✅ **Option 5-8:** Existing options renumbered (winecfg, uninstall, language, exit)
+- ✅ **User Guidance** - Tools are clearly marked as "recommended" to guide users
+
+#### Dynamic Copyright Year
+- ✅ **Auto-Detection** - Copyright year updates automatically using `date +%Y`
+- ✅ **Future-Proof** - Will show correct year in 2025, 2026, and beyond
+- ✅ **Consistent Display** - Shows "© 2025 benjarogit | GPL-3.0 License" (or current year)
+
+#### ANSI Color Banner
+- ✅ **No External Files** - Banner generated directly in `setup.sh` with ANSI escape codes
+- ✅ **Beautiful Colors** - Cyan frame, Magenta title, Blue logo, Yellow menu options, Green for helpful tools
+- ✅ **Cross-Platform** - POSIX-compliant `\033` codes work on all Linux distributions
+- ✅ **Terminal Fallback** - Automatically disables colors for "dumb" terminals
+- ✅ **Perfect Alignment** - Bottom border closes correctly with proper padding
+- ✅ **Responsive** - Works with both English and German text lengths
+- ✅ **Language Switcher** - Option 7 toggles between English and German (auto-detect on startup)
+
+#### Copyright & Documentation
+- ✅ **Professional Headers** - All scripts now have ShellDoc-style copyright headers
+- ✅ **License Information** - GPL-3.0 license clearly stated in all files
+- ✅ **Author Attribution** - Copyright © 2024 benjarogit (will show 2025 when run)
+- ✅ **Original Credit** - Proper attribution to Gictorbit's original work
+- ✅ **README Updates** - Added License & Copyright sections to both READMEs
+
+#### Critical Bug Fixes
+- 🐛 **Fixed Debug Logging** - Removed hardcoded debug paths that would fail on other systems
+- 🐛 **Fixed Language Toggle Persistence** - `detect_language()` now respects manual language selection
+- 🐛 **Fixed load_paths() Readability Check** - Now respects `skip_validation` parameter for uninstaller
+- 🐛 **Fixed Negative Padding Bug** - Added safety checks to prevent negative padding values in banner
+- 🐛 **Fixed launcher.sh Bug #1** - Replaced hardcoded `pspath`/`pscache` placeholders with proper `sharedFuncs.sh` sourcing
+- 🐛 **Fixed launcher.sh Bug #2** - `sharedFuncs.sh` is now copied to launcher directory so it can be sourced at runtime
+- 🐛 **Fixed launcher.sh Bug #3** - Source command now uses `$SCRIPT_DIR` to locate `sharedFuncs.sh` relative to script location (fixes symlink execution via `/usr/local/bin/photoshop`)
+- 🐛 **Fixed load_paths() Bug #1** - Added comprehensive validation for `$HOME/.psdata.txt` (existence, readability, non-empty paths)
+- 🐛 **Fixed load_paths() Bug #2** - Added `$CACHE_PATH` directory validation (was missing, only `$SCR_PATH` was validated)
+- 🐛 **Fixed load_paths() Bug #3** - Added optional `skip_validation` parameter for uninstaller to work even if directories are deleted
+- 🐛 **Fixed read_input() Bug** - Updated regex from `^[1-5]$` to `^[1-8]$` to accept all 8 menu options
+- 🐛 **Fixed sharedFuncs.sh** - Removed unnecessary `sed` replacements for launcher.sh
+
+### Technical Details
+
+**New Functions:**
+- `get_system_info()` - Collects and formats system information (distro, kernel, RAM, Wine version)
+- Enhanced `banner()` - Now displays system info and 8 menu options with smart padding
+
+**Color Codes Used:**
+- `\033[0;36;1m` - Cyan (frame)
+- `\033[0;35;1m` - Magenta (title)
+- `\033[0;34;1m` - Blue (logo)
+- `\033[0;33;1m` - Yellow (menu options)
+- `\033[0;32;1m` - Green (helpful tools: pre-check, troubleshoot)
+- `\033[0;37;1m` - White (URL)
+- `\033[0;37m` - Gray (system info)
+- `\033[0m` - Reset
+
+**Banner Dimensions:**
+- Total width: 98 characters
+- Text area: 62 characters (dynamically padded with safety checks)
+- System info line: 75 characters max (truncates distribution name if needed)
+- Bottom border: 15 + 46 + 10 + 1 = 72 characters after prefix
+
+**Menu Structure:**
+- 8 options (expanded from 6)
+- Options 3-4: New integrated tools (green highlight)
+- Options 5-8: Existing features (renumbered)
+
+### Files Changed
+
+- `setup.sh` - **MAJOR REWRITE**
+  - Added `get_system_info()` function for real-time system data
+  - Complete banner rewrite with ANSI colors, system info display, and 8 menu options
+  - Added `msg_pre_check()` and `msg_troubleshoot()` message functions
+  - Integrated pre-check and troubleshoot tools into main menu
+  - Dynamic copyright year detection
+  - Enhanced `detect_language()` to preserve manual language selection
+  - Safety checks for negative padding values
+  - Updated input validation regex to accept 1-8
+- `scripts/sharedFuncs.sh` - **CRITICAL FIXES**
+  - Removed sed replacements for launcher.sh
+  - Added comprehensive `load_paths()` validation with `skip_validation` parameter
+  - Fixed readability check to respect skip_validation
+  - Copies `sharedFuncs.sh` to launcher directory
+  - Added copyright header
+- `scripts/launcher.sh` - **CRITICAL FIX**
+  - Replaced hardcoded `pspath`/`pscache` with dynamic path loading
+  - Uses `$SCRIPT_DIR` for symlink-safe execution
+  - Sources `sharedFuncs.sh` from script directory
+  - Added copyright header
+- `scripts/PhotoshopSetup.sh` - Added copyright header
+- `scripts/winecfg.sh` - Added copyright header
+- `scripts/uninstaller.sh` - Modified to call `load_paths "true"` + copyright header
+- `scripts/cameraRawInstaller.sh` - Added copyright header
+- `pre-check.sh` - Added copyright header
+- `troubleshoot.sh` - Added copyright header
+- `README.md` - Added License & Copyright section (year will be updated to 2025)
+- `README.de.md` - Added Lizenz & Copyright section (year will be updated to 2025)
+- `CHANGELOG.md` - **THIS FILE** - Comprehensive documentation of all changes
+
+### Files Changed/Removed
+
+**Updated:**
+- `images/setup-screenshot.png` - New screenshot showing colored banner with language switcher
+
+**Removed:**
+- `images/banner` - No longer needed (banner in script)
+- `images/banner.txt` - No longer needed (banner in script)
+- `images/banner.old` - Backup file removed
+- `images/poshtibancom.png` - Unused image removed
+
+### Why This Matters
+
+**Before:**
+- Users had to manually run pre-check and troubleshoot scripts
+- No system information visible before installation
+- Copyright year was hardcoded (would show 2024 in 2025)
+- Language toggle didn't persist (reset by system detection)
+- Banner was a static image file
+- Hardcoded placeholders required `sed` manipulation
+- **launcher.sh would crash** - couldn't find `sharedFuncs.sh` at runtime
+- **load_paths() would fail silently** - no validation of data file
+- Negative padding could break banner display
+
+**After:**
+- **Guided Installation** - Pre-check and troubleshoot integrated into menu
+- **System Transparency** - Users see their system specs before installing
+- **Future-Proof** - Copyright year updates automatically
+- **Persistent Language Choice** - Manual language selection is preserved
+- **Beautiful Dynamic Banner** - Generated on-the-fly with real-time system info
+- **Robust Path Handling** - `launcher.sh` works reliably from any location
+- **Symlink Execution** - `/usr/local/bin/photoshop` command works from any directory
+- **Comprehensive Validation** - `load_paths()` validates everything with clear error messages
+- **Safe Padding** - Negative padding values prevented with safety checks
+- **Professional Code** - Proper copyright attribution in all scripts
+
+### Compatibility
+
+Tested and working on:
+- ✅ Bash 4.0+
+- ✅ Bash 5.0+
+- ✅ sh (POSIX)
+- ✅ All major Linux distributions
+
+---
+
 # Release v2.0.3 - Banner Multilingual Fix
 
 ## 🔧 Critical Fix: Banner Now Truly Multilingual

@@ -1,16 +1,32 @@
 #!/usr/bin/env bash
-
-# Photoshop CC Linux Launcher - Verbesserte Version
-# Unterstützt mehrere mögliche Installationspfade
-# Berücksichtigt bekannte Probleme aus GitHub Issues
+################################################################################
+# Photoshop CC Linux Launcher
+#
+# Description:
+#   Launches Adobe Photoshop CC with optimized Wine environment variables
+#   for improved performance and stability. Includes GPU acceleration tweaks
+#   and multi-threading optimizations.
+#
+# Author:       benjarogit
+# Repository:   https://github.com/benjarogit/photoshopCClinux
+# License:      GPL-3.0
+# Copyright:    (c) 2024 benjarogit
+#
+# Based on:     photoshopCClinux by Gictorbit
+#               https://github.com/Gictorbit/photoshopCClinux
+################################################################################
 
 if [ $# -ne 0 ];then
     echo "Keine Parameter erforderlich - starte das Skript ohne Argumente"
     exit 1
 fi
 
-SCR_PATH="pspath"
-CACHE_PATH="pscache"
+# Get the directory where this script is located (resolves symlinks)
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" || echo "$0")")" && pwd)"
+
+# Load shared functions and paths from the script's directory
+source "$SCRIPT_DIR/sharedFuncs.sh"
+load_paths
 
 RESOURCES_PATH="$SCR_PATH/resources"
 WINE_PREFIX="$SCR_PATH/prefix"

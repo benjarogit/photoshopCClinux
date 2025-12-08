@@ -639,6 +639,16 @@ Photoshop 2020+ has increased Adobe login requirements and may not work well off
 
 ---
 
+## 📄 License & Copyright
+
+**Copyright © 2024 benjarogit**
+
+This project is licensed under the **GPL-3.0 License**.
+
+Based on [photoshopCClinux](https://github.com/Gictorbit/photoshopCClinux) by Gictorbit.
+
+---
+
 **Made with ❤️ for the Linux community**
 
 **Star ⭐ this repo if it helped you!**

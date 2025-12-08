@@ -1,4 +1,19 @@
 #!/usr/bin/env bash
+################################################################################
+# Photoshop CC Linux - Uninstaller
+#
+# Description:
+#   Removes Adobe Photoshop CC installation including Wine prefix,
+#   desktop entries, and all associated files.
+#
+# Author:       benjarogit
+# Repository:   https://github.com/benjarogit/photoshopCClinux
+# License:      GPL-3.0
+# Copyright:    (c) 2024 benjarogit
+#
+# Based on:     photoshopCClinux by Gictorbit
+#               https://github.com/Gictorbit/photoshopCClinux
+################################################################################
 
 source "sharedFuncs.sh"
 
@@ -81,5 +96,6 @@ function ask_question() {
     fi
 }
 
-load_paths
+# Load paths with skip_validation=true to allow uninstall even if directories are deleted
+load_paths "true"
 main

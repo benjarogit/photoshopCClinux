@@ -1,4 +1,20 @@
 #!/usr/bin/env bash
+################################################################################
+# Photoshop CC Linux - Camera Raw Installer
+#
+# Description:
+#   Installs Adobe Camera Raw v12 plugin for Photoshop CC.
+#   Handles file extraction and integration into the Photoshop installation.
+#
+# Author:       benjarogit
+# Repository:   https://github.com/benjarogit/photoshopCClinux
+# License:      GPL-3.0
+# Copyright:    (c) 2024 benjarogit
+#
+# Based on:     photoshopCClinux by Gictorbit
+#               https://github.com/Gictorbit/photoshopCClinux
+################################################################################
+
 function main() {
     
     source "sharedFuncs.sh"

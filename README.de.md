@@ -421,7 +421,16 @@ Die Installation sollte problemlos funktionieren. Bei Fragen oder Problemen scha
 
 ---
 
-**Version:** Angepasst für lokale Installation (Dezember 2024)  
-**Basiert auf:** [Gictorbit/photoshopCClinux](https://github.com/Gictorbit/photoshopCClinux)  
-**Lizenz:** GPL-2.0
+## 📄 Lizenz & Copyright
 
+**Copyright © 2024 benjarogit**
+
+Dieses Projekt ist unter der **GPL-3.0 Lizenz** lizenziert.
+
+Basiert auf [photoshopCClinux](https://github.com/Gictorbit/photoshopCClinux) von Gictorbit.
+
+---
+
+**Mit ❤️ für die Linux-Community**
+
+**Gib diesem Repo einen Stern ⭐ wenn es dir geholfen hat!**

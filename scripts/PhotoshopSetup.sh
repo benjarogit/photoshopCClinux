@@ -1,4 +1,21 @@
 #!/usr/bin/env bash
+################################################################################
+# Photoshop CC Linux Installer - Installation Script
+#
+# Description:
+#   Handles the complete installation process of Adobe Photoshop CC on Linux
+#   including Wine configuration, dependency installation, registry tweaks,
+#   and performance optimizations for stable operation.
+#
+# Author:       benjarogit
+# Repository:   https://github.com/benjarogit/photoshopCClinux
+# License:      GPL-3.0
+# Copyright:    (c) 2024 benjarogit
+#
+# Based on:     photoshopCClinux by Gictorbit
+#               https://github.com/Gictorbit/photoshopCClinux
+################################################################################
+
 source "sharedFuncs.sh"
 
 # Detect system language

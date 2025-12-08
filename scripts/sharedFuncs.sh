@@ -1,3 +1,19 @@
+#!/usr/bin/env bash
+################################################################################
+# Photoshop CC Linux - Shared Functions Library
+#
+# Description:
+#   Common utility functions used across all installer scripts including
+#   package detection, path management, progress indicators, and notifications.
+#
+# Author:       benjarogit
+# Repository:   https://github.com/benjarogit/photoshopCClinux
+# License:      GPL-3.0
+# Copyright:    (c) 2024 benjarogit
+#
+# Based on:     photoshopCClinux by Gictorbit
+#               https://github.com/Gictorbit/photoshopCClinux
+################################################################################
 
 #has tow mode [pkgName] [mode=summary]
 function package_installed() {
@@ -70,7 +86,13 @@ function launcher() {
         
         cp "$launcher_path" "$launcher_dest" || error "can't copy launcher"
         
-        sed -i "s|pspath|$SCR_PATH|g" "$launcher_dest/launcher.sh" && sed -i "s|pscache|$CACHE_PATH|g" "$launcher_dest/launcher.sh" || error "can't edit launcher script"
+        # Copy sharedFuncs.sh to launcher directory so launcher.sh can source it
+        local shared_funcs_path="$PWD/sharedFuncs.sh"
+        if [ -f "$shared_funcs_path" ]; then
+            cp "$shared_funcs_path" "$launcher_dest" || error "can't copy sharedFuncs.sh"
+        else
+            error "sharedFuncs.sh Not Found"
+        fi
         
         chmod +x "$SCR_PATH/launcher/launcher.sh" || error "can't chmod launcher script"
     else
@@ -90,6 +112,8 @@ function launcher() {
             rm "$desktop_entry_dest"
         fi
         cp "$desktop_entry" "$desktop_entry_dest" || error "can't copy desktop entry"
+        
+        # Replace pspath placeholder in desktop entry
         sed -i "s|pspath|$SCR_PATH|g" "$desktop_entry_dest" || error "can't edit desktop entry"
         
         # Mache Desktop-Entry ausführbar
@@ -316,8 +340,72 @@ function save_paths() {
 }
 
 function load_paths() {
+    local skip_validation="${1:-false}"  # Optional parameter: skip directory validation
     local datafile="$HOME/.psdata.txt"
-    SCR_PATH=$(head -n 1 "$datafile")
-    CACHE_PATH=$(tail -n 1 "$datafile")
+    
+    # Validate datafile exists and is readable
+    if [ ! -f "$datafile" ]; then
+        echo "ERROR: Installation data file not found: $datafile"
+        if [ "$skip_validation" = "false" ]; then
+            echo "Please reinstall Photoshop CC using setup.sh"
+            exit 1
+        else
+            # For uninstaller: set empty paths and continue
+            SCR_PATH=""
+            CACHE_PATH=""
+            return 0
+        fi
+    fi
+    
+    if [ ! -r "$datafile" ]; then
+        echo "ERROR: Cannot read installation data file: $datafile"
+        if [ "$skip_validation" = "false" ]; then
+            echo "Please check file permissions"
+            exit 1
+        else
+            # For uninstaller: set empty paths and continue
+            SCR_PATH=""
+            CACHE_PATH=""
+            return 0
+        fi
+    fi
+    
+    # Load paths and validate they are not empty
+    SCR_PATH=$(head -n 1 "$datafile" 2>/dev/null)
+    CACHE_PATH=$(tail -n 1 "$datafile" 2>/dev/null)
+    
+    if [ -z "$SCR_PATH" ]; then
+        echo "ERROR: Installation path (SCR_PATH) is empty or corrupted in $datafile"
+        if [ "$skip_validation" = "false" ]; then
+            echo "Please reinstall Photoshop CC using setup.sh"
+            exit 1
+        fi
+    fi
+    
+    if [ -z "$CACHE_PATH" ]; then
+        echo "ERROR: Cache path (CACHE_PATH) is empty or corrupted in $datafile"
+        if [ "$skip_validation" = "false" ]; then
+            echo "Please reinstall Photoshop CC using setup.sh"
+            exit 1
+        fi
+    fi
+    
+    # Validate paths actually exist (skip for uninstaller)
+    if [ "$skip_validation" = "false" ]; then
+        if [ ! -d "$SCR_PATH" ]; then
+            echo "ERROR: Installation directory does not exist: $SCR_PATH"
+            echo "Photoshop may have been moved or deleted"
+            echo "Please reinstall Photoshop CC using setup.sh"
+            exit 1
+        fi
+        
+        if [ ! -d "$CACHE_PATH" ]; then
+            echo "ERROR: Cache directory does not exist: $CACHE_PATH"
+            echo "Photoshop cache may have been moved or deleted"
+            echo "Please reinstall Photoshop CC using setup.sh"
+            exit 1
+        fi
+    fi
+    
     unset datafile
 }

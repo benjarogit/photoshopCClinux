@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
-
-# Pre-Installation Check Script für Photoshop CC
-# Überprüft alle Voraussetzungen vor der Installation
+################################################################################
+# Photoshop CC Linux - Pre-Installation Check
+#
+# Description:
+#   Validates system requirements before installation including Wine version,
+#   required packages, disk space, and local installation files.
+#
+# Author:       benjarogit
+# Repository:   https://github.com/benjarogit/photoshopCClinux
+# License:      GPL-3.0
+# Copyright:    (c) 2024 benjarogit
+################################################################################
 
 echo "═══════════════════════════════════════════════════════════════"
 echo "    Photoshop CC - Pre-Installation Check"

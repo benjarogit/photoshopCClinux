@@ -1,4 +1,20 @@
 #!/usr/bin/env bash
+################################################################################
+# Photoshop CC Linux - Wine Configuration Launcher
+#
+# Description:
+#   Opens Wine configuration (winecfg) for the Photoshop Wine prefix.
+#   Allows users to adjust Wine settings, Windows version, and drives.
+#
+# Author:       benjarogit
+# Repository:   https://github.com/benjarogit/photoshopCClinux
+# License:      GPL-3.0
+# Copyright:    (c) 2024 benjarogit
+#
+# Based on:     photoshopCClinux by Gictorbit
+#               https://github.com/Gictorbit/photoshopCClinux
+################################################################################
+
 source "sharedFuncs.sh"
 
 function main() {
