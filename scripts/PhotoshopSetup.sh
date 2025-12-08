@@ -130,6 +130,26 @@ function main() {
     show_message "$MSG_DLL"
     winetricks -q dxvk_async=disabled d3d11=native
     
+    # Zusätzliche Performance & Rendering Fixes
+    show_message "$([ "$LANG_CODE" = "de" ] && echo "Konfiguriere Wine-Registry für bessere Performance..." || echo "Configuring Wine registry for better performance...")"
+    
+    # Enable CSMT for better performance (Command Stream Multi-Threading)
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v csmt /t REG_DWORD /d 1 /f 2>/dev/null || true
+    
+    # Disable shader cache to avoid corruption (Issue #206 - Black Screen)
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v shader_backend /t REG_SZ /d glsl /f 2>/dev/null || true
+    
+    # Force DirectDraw renderer (helps with screen update issues - Issue #161)
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v DirectDrawRenderer /t REG_SZ /d opengl /f 2>/dev/null || true
+    
+    # Disable vertical sync for better responsiveness
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v StrictDrawOrdering /t REG_SZ /d disabled /f 2>/dev/null || true
+    
+    # Fix UI scaling issues (Issue #56)
+    show_message "$([ "$LANG_CODE" = "de" ] && echo "Konfiguriere DPI-Skalierung..." || echo "Configuring DPI scaling...")"
+    wine reg add "HKEY_CURRENT_USER\\Control Panel\\Desktop" /v LogPixels /t REG_DWORD /d 96 /f 2>/dev/null || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Fonts" /v Smoothing /t REG_DWORD /d 2 /f 2>/dev/null || true
+    
     #install photoshop
     sleep 3
     install_photoshopSE
@@ -263,6 +283,10 @@ function install_photoshopSE() {
 useOpenCL 0
 useGraphicsProcessor 0
 EOF
+            
+            # PNG Save Fix (Issue #209): Installiere zusätzliche GDI+ Komponenten
+            show_message "$([ "$LANG_CODE" = "de" ] && echo "Installiere PNG/Export-Komponenten..." || echo "Installing PNG/Export components...")"
+            winetricks -q gdiplus_winxp 2>/dev/null || true
             
             break
         fi

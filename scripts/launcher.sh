@@ -29,6 +29,14 @@ export FREETYPE_PROPERTIES="truetype:interpreter-version=35"
 # Fix für DLL-Probleme (Issue #34, #56)
 export WINEDLLOVERRIDES="winemenubuilder.exe=d"
 
+# Performance-Optimierungen (Issue #135 - Zoom lag)
+export WINE_CPU_TOPOLOGY="4:2"  # Optimal CPU usage
+export __GL_THREADED_OPTIMIZATIONS=1  # Better OpenGL performance
+export __GL_YIELD="USLEEP"  # Reduce input lag
+
+# Fix für Screen Update Issues (Issue #161 - Undo/Redo lag)
+export CSMT=enabled  # Command Stream Multi-Threading
+
 # Prüfe Wine-Konfiguration
 if [ ! -d "$WINE_PREFIX" ]; then
     echo "FEHLER: Wine-Prefix nicht gefunden: $WINE_PREFIX"
