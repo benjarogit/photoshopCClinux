@@ -1,6 +1,102 @@
 #!/usr/bin/env bash
 
+# Detect system language
+detect_language() {
+    if [[ "$LANG" =~ ^de ]]; then
+        LANG_CODE="de"
+    else
+        LANG_CODE="en"
+    fi
+}
+
+# Multi-language messages
+msg_choose_option() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "[Wähle eine Option]$ "
+    else
+        echo "[choose an option]$ "
+    fi
+}
+
+msg_run_photoshop() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Starte Photoshop CC Installation..."
+        echo -n "Verwende winetricks für Komponenten-Installation..."
+    else
+        echo "run photoshop CC Installation..."
+        echo -n "using winetricks for component installation..."
+    fi
+}
+
+msg_run_camera_raw() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo -n "Starte Adobe Camera Raw Installer"
+    else
+        echo -n "run adobe camera Raw installer"
+    fi
+}
+
+msg_run_winecfg() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Starte winecfg..."
+        echo -n "Öffne virtuelles Laufwerk Konfiguration..."
+    else
+        echo "run winecfg..."
+        echo -n "open virtualdrive configuration..."
+    fi
+}
+
+msg_uninstall() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo -n "Deinstalliere Photoshop CC ..."
+    else
+        echo -n "uninstall photoshop CC ..."
+    fi
+}
+
+msg_exit() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Setup beenden..."
+    else
+        echo "exit setup..."
+    fi
+}
+
+msg_goodbye() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Auf Wiedersehen :)"
+    else
+        echo "Good Bye :)"
+    fi
+}
+
+msg_found() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "$1 gefunden..."
+    else
+        echo "$1 Found..."
+    fi
+}
+
+msg_not_found() {
+    if [ "$LANG_CODE" = "de" ]; then
+        error "$1 nicht gefunden..."
+    else
+        error "$1 not Found..."
+    fi
+}
+
+msg_banner_not_found() {
+    if [ "$LANG_CODE" = "de" ]; then
+        error "Banner nicht gefunden..."
+    else
+        error "banner not Found..."
+    fi
+}
+
 function main() {
+    # Detect language
+    detect_language
     
     #print banner
     banner
@@ -12,25 +108,23 @@ function main() {
     case "$answer" in
 
     1)  
-        echo "run photoshop CC Installation..."
-        echo -n "using winetricks for component installation..."
+        msg_run_photoshop
         run_script "scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh"
         ;;
     2)  
-        echo -n "run adobe camera Raw installer"
+        msg_run_camera_raw
         run_script "scripts/cameraRawInstaller.sh" "cameraRawInstaller.sh"
         ;;
     3)  
-        echo "run winecfg..."
-        echo -n "open virtualdrive configuration..."
+        msg_run_winecfg
         run_script "scripts/winecfg.sh" "winecfg.sh"
         ;;
     4)  
-        echo -n "uninstall photoshop CC ..."
+        msg_uninstall
         run_script "scripts/uninstaller.sh" "uninstaller.sh"
         ;;
     5)  
-        echo "exit setup..."
+        msg_exit
         exitScript
         ;;
     esac
@@ -43,10 +137,10 @@ function run_script() {
 
     wait_second 5
     if [ -f "$script_path" ];then
-        echo "$script_path Found..."
+        msg_found "$script_path"
         chmod +x "$script_path"
     else
-        error "$script_name not Found..."    
+        msg_not_found "$script_name"
     fi
     cd "./scripts/" && bash $script_name
     unset script_path
@@ -62,18 +156,22 @@ function wait_second() {
 
 function read_input() {
     while true ;do
-        read -p "[choose an option]$ " choose
+        read -p "$(msg_choose_option)" choose
         if [[ "$choose" =~ (^[1-5]$) ]];then
             break
         fi
-        warning "choose a number between 1 to 5"
+        if [ "$LANG_CODE" = "de" ]; then
+            warning "Wähle eine Zahl zwischen 1 und 5"
+        else
+            warning "choose a number between 1 to 5"
+        fi
     done
 
     return $choose
 }
 
 function exitScript() {
-    echo "Good Bye :)"
+    msg_goodbye
 }
 
 function banner() {
@@ -83,7 +181,7 @@ function banner() {
         cat $banner_path
         echo ""
     else
-        error "banner not Found..."
+        msg_banner_not_found
     fi
     unset banner_path
 }

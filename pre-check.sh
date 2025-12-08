@@ -84,14 +84,16 @@ echo ""
 
 # Check 4: RAM
 echo "4. Überprüfe Arbeitsspeicher..."
-TOTAL_RAM=$(free -g | awk '/^Mem:/{print $2}')
+TOTAL_RAM=$(free -m | awk '/^Mem:/{print int($2/1024)}')
 
-if [ "$TOTAL_RAM" -ge 8 ]; then
+if [ -n "$TOTAL_RAM" ] && [ "$TOTAL_RAM" -ge 8 ]; then
     check_ok "RAM: ${TOTAL_RAM}GB (Optimal für Photoshop)"
-elif [ "$TOTAL_RAM" -ge 4 ]; then
+elif [ -n "$TOTAL_RAM" ] && [ "$TOTAL_RAM" -ge 4 ]; then
     check_warning "RAM: ${TOTAL_RAM}GB (Funktioniert, aber 8GB empfohlen)"
-else
+elif [ -n "$TOTAL_RAM" ]; then
     check_error "RAM: ${TOTAL_RAM}GB (Zu wenig! Mindestens 4GB benötigt)"
+else
+    check_warning "RAM konnte nicht ermittelt werden"
 fi
 echo ""
 

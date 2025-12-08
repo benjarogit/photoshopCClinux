@@ -1,3 +1,51 @@
+# Release v2.0.2 - Multi-Language & Repository Update
+
+## 🌍 Multi-Language Support
+
+This update adds **complete multi-language support** to the installation process!
+
+### What's New
+
+#### Multi-Language Installation
+- ✅ **Automatic Language Detection** - Detects system language (`$LANG`)
+- ✅ **German Translation** - All installation messages in German
+- ✅ **English Fallback** - Defaults to English for non-German systems
+- ✅ **Consistent Experience** - Same language throughout installation
+
+#### Repository Updates
+- ✅ **Correct GitHub URLs** - All references updated to `benjarogit/photoshopCClinux`
+- ✅ **Updated Banner** - Installation banner shows correct repository
+- ✅ **Fixed Pre-Check** - RAM detection now works correctly
+
+### Files Changed
+
+- `setup.sh` - Added complete multi-language support
+- `images/banner` - Updated GitHub URL
+- `images/banner.txt` - Updated GitHub URL  
+- `pre-check.sh` - Fixed RAM detection bug
+
+### Language Support
+
+**German Messages:**
+- "Starte Photoshop CC Installation..."
+- "Verwende winetricks für Komponenten-Installation..."
+- "Wähle eine Zahl zwischen 1 und 5"
+- "Auf Wiedersehen :)"
+
+**English Messages:**
+- "run photoshop CC Installation..."
+- "using winetricks for component installation..."
+- "choose a number between 1 to 5"
+- "Good Bye :)"
+
+### Bug Fixes
+
+- 🐛 Fixed RAM detection showing "0GB" or empty values
+- 🐛 Fixed GitHub URLs still pointing to original repository
+- 🐛 Fixed banner showing old repository URL
+
+---
+
 # Release v2.0.1 - Performance & Stability Update
 
 ## 🔧 Code-Level Fixes
