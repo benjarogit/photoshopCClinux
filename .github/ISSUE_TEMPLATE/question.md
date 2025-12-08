@@ -40,3 +40,4 @@ Add any other relevant information here.
 - Screen lag → Check Wine registry tweaks in launcher
 
 
+

@@ -45,6 +45,7 @@ Optimized for CachyOS and all major Linux distributions.
 - ✅ **Desktop Integration** - Creates menu entry and terminal command
 - ✅ **GPU Workarounds** - Fixes for common graphics issues
 - ✅ **Multi-Language** - Supports all Photoshop language packs
+- 🧪 **Experimental: Proton GE Support** - Optional Proton GE integration for improved compatibility (see [Proton GE Support](#-experimental-proton-ge-support))
 
 ---
 
@@ -288,6 +289,56 @@ For stability:
 
 ---
 
+## 🧪 Experimental: Proton GE Support
+
+### What is Proton GE?
+
+[Proton GE](https://github.com/GloriousEggroll/proton-ge-custom) is a community fork of Valve's Proton, optimized for gaming but also useful for desktop applications. It can provide better compatibility than standard Wine for some applications.
+
+### ⚠️ Experimental Status
+
+**Proton GE support is currently EXPERIMENTAL and may not work perfectly for all users.**
+
+We're actively testing and improving Proton GE integration. If you encounter issues:
+- Report them in [GitHub Issues](https://github.com/benjarogit/photoshopCClinux/issues)
+- Try using Standard Wine instead (usually works fine)
+- Help us improve by sharing your experience
+
+### How to Use Proton GE
+
+1. **Install Proton GE** (Arch-based systems):
+   ```bash
+   yay -S proton-ge-custom-bin
+   # or
+   paru -S proton-ge-custom-bin
+   ```
+
+2. **During Installation**:
+   - The installer will detect Proton GE automatically
+   - You can choose between Proton GE and Standard Wine
+   - Proton GE is recommended for better compatibility
+
+3. **Known Limitations**:
+   - **Adobe Installer Buttons**: The Adobe installer uses an IE engine that may not work perfectly with Proton GE. If buttons don't respond:
+     - Install IE8 when prompted (takes 5-10 minutes, but helps)
+     - Wait 15-30 seconds for the installer to load
+     - Use Tab + Enter or Alt+N/Alt+W to navigate
+   - **Steam Auto-Start**: Steam may start automatically when using Proton GE - this is normal
+   - **Winetricks Compatibility**: Some winetricks components may not work perfectly with Proton GE
+
+### Contributing to Proton GE Support
+
+We welcome contributions to improve Proton GE support:
+
+- **Report Issues**: Found a bug? [Open an issue](https://github.com/benjarogit/photoshopCClinux/issues)
+- **Share Solutions**: Found a workaround? Share it in the issues!
+- **Test Different Versions**: Try different Proton GE versions and report results
+- **Improve Documentation**: Help us document what works and what doesn't
+
+**Your help makes this project better for everyone! 🙏**
+
+---
+
 ## 🐛 Known Issues & Solutions
 
 ### Issue 1: Photoshop Crashes on Startup
@@ -381,6 +432,25 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks fontsmooth=rgb
 3. This is expected behavior with Wine
 4. Performance is better on wine-staging
 ```
+
+### Issue 11: Adobe Installer "Next" Button Doesn't Respond
+
+**Cause:** Adobe installer uses Internet Explorer engine (mshtml.dll) which doesn't work perfectly in Wine/Proton
+
+**Solution:**
+```
+1. Install IE8 when prompted (takes 5-10 minutes, but significantly helps)
+2. Wait 15-30 seconds - installer sometimes loads slowly
+3. Use keyboard navigation:
+   - Tab key multiple times to focus the button
+   - Press Enter to click
+   - Or: Alt+N (Next) / Alt+W (Weiter in German)
+4. Click directly on the button (not beside it)
+5. Bring installer window to foreground (Alt+Tab)
+6. If nothing works: Use Standard Wine instead of Proton GE for installation
+```
+
+**Note:** This is a known limitation of Wine/Proton with IE-based installers. The installer has already configured DLL-overrides and registry tweaks to improve compatibility.
 
 ---
 
@@ -652,4 +722,5 @@ Based on [photoshopCClinux](https://github.com/Gictorbit/photoshopCClinux) by Gi
 **Made with ❤️ for the Linux community**
 
 **Star ⭐ this repo if it helped you!**
+
 

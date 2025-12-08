@@ -182,6 +182,54 @@ Nach erfolgreicher Installation kannst du Photoshop auf drei Arten starten:
 
 **Hinweis:** Der erste Start kann 1-2 Minuten dauern. Das ist normal!
 
+## 🧪 Experimentell: Proton GE Unterstützung
+
+### Was ist Proton GE?
+
+[Proton GE](https://github.com/GloriousEggroll/proton-ge-custom) ist ein Community-Fork von Valves Proton, optimiert für Gaming, aber auch für Desktop-Anwendungen nützlich. Es kann bessere Kompatibilität als Standard-Wine bieten.
+
+### ⚠️ Experimenteller Status
+
+**Die Proton GE Unterstützung ist derzeit EXPERIMENTELL und funktioniert möglicherweise nicht perfekt für alle Benutzer.**
+
+Wir testen und verbessern die Proton GE Integration aktiv. Falls du Probleme hast:
+- Melde sie in [GitHub Issues](https://github.com/benjarogit/photoshopCClinux/issues)
+- Versuche Standard-Wine stattdessen (funktioniert meist auch)
+- Hilf uns zu verbessern, indem du deine Erfahrungen teilst
+
+### Wie man Proton GE verwendet
+
+1. **Proton GE installieren** (Arch-basierte Systeme):
+   ```bash
+   yay -S proton-ge-custom-bin
+   # oder
+   paru -S proton-ge-custom-bin
+   ```
+
+2. **Während der Installation**:
+   - Der Installer erkennt Proton GE automatisch
+   - Du kannst zwischen Proton GE und Standard-Wine wählen
+   - Proton GE wird für bessere Kompatibilität empfohlen
+
+3. **Bekannte Einschränkungen**:
+   - **Adobe Installer Buttons**: Der Adobe Installer verwendet eine IE-Engine, die möglicherweise nicht perfekt mit Proton GE funktioniert. Falls Buttons nicht reagieren:
+     - Installiere IE8 wenn gefragt (dauert 5-10 Minuten, hilft aber)
+     - Warte 15-30 Sekunden - der Installer lädt manchmal langsam
+     - Verwende Tastaturnavigation: Tab + Enter oder Alt+W/Alt+N
+   - **Steam Auto-Start**: Steam startet möglicherweise automatisch bei Proton GE - das ist normal
+   - **Winetricks Kompatibilität**: Einige winetricks-Komponenten funktionieren möglicherweise nicht perfekt mit Proton GE
+
+### Mithelfen bei Proton GE Unterstützung
+
+Wir freuen uns über Beiträge zur Verbesserung der Proton GE Unterstützung:
+
+- **Fehler melden**: Einen Bug gefunden? [Öffne ein Issue](https://github.com/benjarogit/photoshopCClinux/issues)
+- **Lösungen teilen**: Einen Workaround gefunden? Teile ihn in den Issues!
+- **Verschiedene Versionen testen**: Probiere verschiedene Proton GE Versionen und berichte Ergebnisse
+- **Dokumentation verbessern**: Hilf uns zu dokumentieren, was funktioniert und was nicht
+
+**Deine Hilfe macht dieses Projekt für alle besser! 🙏**
+
 ## 🐛 Bekannte Probleme und Lösungen
 
 Diese Lösungen basieren auf den [GitHub Issues](https://github.com/Gictorbit/photoshopCClinux/issues):
@@ -292,6 +340,25 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks fontsmooth=rgb
 2. Zoom mit Mausrad ist langsamer als nativ
 3. Dies ist erwartetes Verhalten mit Wine
 4. Performance ist besser mit wine-staging
+
+### Problem 11: Adobe Installer "Weiter"-Button reagiert nicht
+
+**Ursache:** Adobe Installer verwendet Internet Explorer Engine (mshtml.dll), die in Wine/Proton nicht perfekt funktioniert
+
+**Lösung:**
+```
+1. Installiere IE8 wenn gefragt (dauert 5-10 Minuten, hilft aber erheblich)
+2. Warte 15-30 Sekunden - Installer lädt manchmal langsam
+3. Verwende Tastaturnavigation:
+   - Tab-Taste mehrmals drücken, um Button zu fokussieren
+   - Enter drücken zum Klicken
+   - Oder: Alt+W (Weiter) / Alt+N (Next)
+4. Klicke direkt auf den Button (nicht daneben)
+5. Installer-Fenster in den Vordergrund bringen (Alt+Tab)
+6. Falls nichts hilft: Verwende Standard-Wine statt Proton GE für Installation
+```
+
+**Hinweis:** Dies ist eine bekannte Einschränkung von Wine/Proton mit IE-basierten Installern. Der Installer hat bereits DLL-Overrides und Registry-Tweaks konfiguriert, um die Kompatibilität zu verbessern.
 
 ## 🎥 Adobe Camera Raw installieren (Optional)
 
@@ -434,4 +501,5 @@ Basiert auf [photoshopCClinux](https://github.com/Gictorbit/photoshopCClinux) vo
 **Mit ❤️ für die Linux-Community**
 
 **Gib diesem Repo einen Stern ⭐ wenn es dir geholfen hat!**
+
 

@@ -18,16 +18,31 @@
 source "sharedFuncs.sh"
 
 function main() {
-    load_paths 
+    # Try to load Photoshop paths, but continue if not installed
+    if load_paths "true" 2>/dev/null && [ -n "$SCR_PATH" ] && [ -d "$SCR_PATH/prefix" ]; then
+        # Photoshop is installed - use its Wine prefix
     RESOURCES_PATH="$SCR_PATH/resources"
     WINE_PREFIX="$SCR_PATH/prefix"
     export WINEPREFIX="$WINE_PREFIX"
-    
-    echo "═══════════════════════════════════════════════════════════════"
-    echo "           Wine-Konfiguration für Photoshop CC"
-    echo "═══════════════════════════════════════════════════════════════"
-    echo ""
-    echo "Wine-Prefix: $WINE_PREFIX"
+        
+        echo "═══════════════════════════════════════════════════════════════"
+        echo "           Wine-Konfiguration für Photoshop CC"
+        echo "═══════════════════════════════════════════════════════════════"
+        echo ""
+        echo "Wine-Prefix: $WINE_PREFIX"
+    else
+        # Photoshop not installed - use default Wine prefix
+        echo "═══════════════════════════════════════════════════════════════"
+        echo "           Wine-Konfiguration (Standard)"
+        echo "═══════════════════════════════════════════════════════════════"
+        echo ""
+        echo "ℹ Photoshop ist noch nicht installiert."
+        echo "  Öffne Standard-Wine-Konfiguration..."
+        echo ""
+        WINE_PREFIX="$HOME/.wine"
+        export WINEPREFIX="$WINE_PREFIX"
+        echo "Wine-Prefix: $WINE_PREFIX"
+    fi
     echo ""
     echo "EMPFOHLENE EINSTELLUNGEN:"
     echo "  1. Applications Tab:"
@@ -59,4 +74,5 @@ function main() {
 }
 
 main
+
 

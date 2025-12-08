@@ -1,3 +1,87 @@
+# Release v2.1.0 - Experimental Proton GE Support & IE Engine Fixes
+
+## 🧪 New Features
+
+### Experimental: Proton GE Support
+- **Proton GE Integration**: Optional support for [Proton GE](https://github.com/GloriousEggroll/proton-ge-custom) (community fork of Valve's Proton)
+- **Automatic Detection**: Detects Proton GE from Steam directory or system installation
+- **Interactive Selection**: Choose between Proton GE and Standard Wine during installation
+- **Auto-Installation**: Option to automatically install Proton GE via AUR (Arch-based systems)
+- **Better Compatibility**: Proton GE may provide better compatibility for some use cases
+
+**⚠️ Experimental Status**: Proton GE support is currently experimental. Report issues in [GitHub Issues](https://github.com/benjarogit/photoshopCClinux/issues).
+
+## 🐛 Critical Bug Fixes
+
+### Adobe Installer "Next" Button Not Responding
+- **Problem**: Adobe installer uses Internet Explorer engine (mshtml.dll) which doesn't work perfectly in Wine/Proton
+- **Solution**: Comprehensive IE engine configuration
+  - **IE8 Installation**: Optional IE8 installation (recommended, takes 5-10 minutes)
+  - **DLL Overrides**: Set to `native,builtin` for maximum compatibility (was `builtin` only)
+  - **Additional DLLs**: Added `actxprxy.dll`, `browseui.dll` overrides
+  - **Registry Tweaks**: Disable script debugger, disable first-run customize
+  - **User Guidance**: Clear instructions for keyboard navigation if buttons don't respond
+
+### Proton GE Configuration Fix
+- **Problem**: System-wide Proton GE was detected but not properly configured (PATH not set)
+- **Fix**: Automatically finds Proton GE installation path and sets PATH correctly
+- **Impact**: Proton GE is now actually used when selected, not just detected
+
+### Menu Option Validation Fix
+- **Problem**: Validation checked range (1-count) but options could be non-consecutive (e.g., [1,2,4])
+- **Fix**: Validation now directly checks if selection exists in WINE_OPTIONS array
+- **Impact**: Prevents "Selection not found" errors with non-consecutive option numbers
+
+## 🔧 Improvements
+
+### Installation Process
+- **Better Logging**: More detailed logging of Wine/Proton version selection
+- **Clearer Messages**: Explains which Wine version is used for installer vs Photoshop
+- **IE8 Prompt**: Clear explanation why IE8 installation is recommended
+- **Error Handling**: Better error messages if Proton GE installation fails
+
+### Documentation
+- **Proton GE Section**: Added experimental Proton GE support documentation
+- **Button Issue**: Added Issue #11 for Adobe installer button problems
+- **Community Help**: Encourages users to contribute and report issues
+- **Known Limitations**: Documents Proton GE limitations (Steam auto-start, winetricks compatibility)
+
+## 📝 Technical Details
+
+### DLL Override Strategy
+**Before:**
+```bash
+wine reg add ... /v mshtml /t REG_SZ /d builtin /f
+```
+
+**After (Best Practice):**
+```bash
+wine reg add ... /v mshtml /t REG_SZ /d "native,builtin" /f
+# Tries native DLLs first, falls back to builtin
+```
+
+### Proton GE Detection
+- **Steam Directory**: `~/.steam/steam/steamapps/common/Proton*`
+- **System Installation**: `/usr/share/proton-ge`, `/usr/local/share/proton-ge`, or via `proton-ge` command
+- **PATH Configuration**: Automatically sets PATH to Proton GE's wine binary
+
+### Files Modified
+- `scripts/PhotoshopSetup.sh` - Proton GE integration, IE engine fixes, menu validation
+- `README.md` - Proton GE documentation, Issue #11
+- `README.de.md` - Proton GE Dokumentation, Problem #11
+
+## 🙏 Community Contributions Welcome
+
+This release includes experimental features that need testing. We welcome:
+- **Bug Reports**: Found an issue? [Open an issue](https://github.com/benjarogit/photoshopCClinux/issues)
+- **Solutions**: Found a workaround? Share it!
+- **Testing**: Try different Proton GE versions and report results
+- **Documentation**: Help improve our docs
+
+**Your help makes this project better for everyone!**
+
+---
+
 # Release v2.0.9 - Critical Hotfix: RAM Detection & Math Correction
 
 ## 🐛 Critical Bug Fixes
@@ -734,5 +818,6 @@ This release represents a complete overhaul of the installation process with foc
 **Release Date:** December 2024  
 **Version:** 2.0.0  
 **License:** GPL-2.0
+
 
 
