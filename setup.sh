@@ -280,8 +280,8 @@ function toggle_internet() {
             echo "Enabling network connections..."
         fi
         
-        # Re-enable all saved connections
-        local all_connections=$(nmcli -t -f NAME connection show | head -5)
+        # Re-enable all saved connections (exclude loopback)
+        local all_connections=$(nmcli -t -f NAME connection show | grep -v "^lo$")
         
         while IFS= read -r conn; do
             if [ -n "$conn" ]; then
