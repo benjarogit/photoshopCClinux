@@ -312,7 +312,7 @@ function toggle_internet() {
                 echo "  (No saved connections - using fallback)"
             fi
             
-            local fallback_conn=$(nmcli -t -f NAME,TYPE connection show | grep -E ":(ethernet|wifi|802-" | head -1 | cut -d: -f1)
+            local fallback_conn=$(nmcli -t -f NAME,TYPE connection show | grep -E ":(802-3-ethernet|802-11-wireless)" | head -1 | cut -d: -f1)
             if [ -n "$fallback_conn" ]; then
                 nmcli connection up "$fallback_conn" &> /dev/null && {
                     if [ "$LANG_CODE" = "de" ]; then
