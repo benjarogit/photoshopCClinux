@@ -163,7 +163,7 @@ if ping -c 1 -W 2 google.com &> /dev/null; then
         
         if [[ $REPLY =~ ^[JjYy]$ ]] || [[ -z $REPLY ]]; then
             echo "   Deaktiviere Verbindungen..."
-            local active_connections=$(nmcli -t -f NAME,STATE connection show | grep ":activated" | cut -d: -f1 | grep -v "^lo$")
+            active_connections=$(nmcli -t -f NAME,STATE connection show | grep ":activated" | cut -d: -f1 | grep -v "^lo$")
             
             if [ -n "$active_connections" ]; then
                 while IFS= read -r conn; do
