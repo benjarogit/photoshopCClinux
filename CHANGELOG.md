@@ -1,3 +1,61 @@
+# Release v2.0.3 - Banner Multilingual Fix
+
+## 🔧 Critical Fix: Banner Now Truly Multilingual
+
+This hotfix addresses the issue where the banner was still showing English text and old GitHub URL despite language detection being implemented.
+
+### What's Fixed
+
+#### Banner Improvements
+- ✅ **Dynamic Menu Options** - Banner now uses template placeholders that get replaced at runtime
+- ✅ **Correct GitHub URL** - Banner now shows `benjarogit/photoshopCClinux` instead of old URL
+- ✅ **True Multilingual Support** - Menu options now actually change based on system language
+- ✅ **Better Text Alignment** - Improved spacing for German menu options
+
+### Technical Changes
+
+**Before (v2.0.2):**
+- Banner was static with hardcoded English text
+- GitHub URL was embedded in ANSI color codes (couldn't be changed)
+- Language detection existed but banner didn't use it
+
+**After (v2.0.3):**
+- Banner uses `{OPTION1}` to `{OPTION5}` placeholders
+- `setup.sh` replaces placeholders with language-specific text at runtime
+- Clean text-based banner for better compatibility
+
+### Files Changed
+
+- `setup.sh` - Added dynamic banner generation with language support
+- `images/banner.txt` - Converted to template with placeholders
+- `images/banner` - Replaced with text version for better compatibility
+
+### Example Output
+
+**German System:**
+```
+1- Photoshop CC installieren
+2- Adobe Camera Raw v12 installieren
+3- Virtuelles Laufwerk konfigurieren  (winecfg)
+4- Photoshop deinstallieren
+5- Beenden
+```
+
+**English System:**
+```
+1- Install photoshop CC
+2- Install adobe camera raw v12
+3- configure virtual drive          (winecfg)
+4- uninstall photoshop
+5- exit
+```
+
+### Apology
+
+Sorry for the oversight in v2.0.2! The language detection was implemented but the banner wasn't using it. This is now fixed properly.
+
+---
+
 # Release v2.0.2 - Multi-Language & Repository Update
 
 ## 🌍 Multi-Language Support
