@@ -98,7 +98,7 @@ echo "4. Überprüfe Arbeitsspeicher..."
 TOTAL_RAM_MB=$(LC_ALL=C free -m | awk '/^Mem:/{print $2}')
 # Only calculate if we got a valid number
 if [ -n "$TOTAL_RAM_MB" ] && [ "$TOTAL_RAM_MB" -gt 0 ]; then
-    TOTAL_RAM=$(( (TOTAL_RAM_MB + 512) / 1024 ))  # Round up to nearest GB
+    TOTAL_RAM=$(( (TOTAL_RAM_MB + 1023) / 1024 ))  # Ceiling division: round up to nearest GB
     [ $TOTAL_RAM -eq 0 ] && TOTAL_RAM=1  # Minimum 1GB display
 else
     TOTAL_RAM=""  # Mark as unknown if detection failed

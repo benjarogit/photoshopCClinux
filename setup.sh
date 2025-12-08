@@ -294,8 +294,8 @@ function get_system_info() {
     local kernel=$(uname -r | cut -d'-' -f1)
     # Force C locale for consistent output across all languages
     local ram_mb=$(LC_ALL=C free -m | awk '/^Mem:/{print $2}')
-    # Round up RAM to nearest GB (avoid showing 0GB)
-    local ram_gb=$(( (ram_mb + 512) / 1024 ))
+    # Ceiling division: round up RAM to nearest GB (avoid showing 0GB)
+    local ram_gb=$(( (ram_mb + 1023) / 1024 ))
     [ $ram_gb -eq 0 ] && ram_gb=1  # Minimum 1GB display
     local wine_ver=$(wine --version 2>/dev/null | cut -d'-' -f2 || echo "not installed")
     
