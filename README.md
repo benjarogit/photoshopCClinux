@@ -1,5 +1,7 @@
 # Adobe Photoshop CC 2019 Installer for Linux
 
+![Photoshop on Linux](images/Screenshot.png)
+
 ![License](https://img.shields.io/badge/license-GPL--2.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![Wine](https://img.shields.io/badge/wine-5.0%2B-red) ![Photoshop](https://img.shields.io/badge/Photoshop-CC%202019-blue)
 
 **Run Adobe Photoshop CC 2019 natively on Linux using Wine**
@@ -187,6 +189,8 @@ chmod +x setup.sh
 ```
 
 Select **Option 1** (install photoshop CC)
+
+![Setup Screenshot](images/setup-screenshot.png)
 
 ### 6. In Adobe Setup Window
 

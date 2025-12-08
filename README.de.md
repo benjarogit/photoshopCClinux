@@ -1,5 +1,7 @@
 # Adobe Photoshop CC 2019 Installation für Linux
 
+![Photoshop unter Linux](images/Screenshot.png)
+
 ![Lizenz](https://img.shields.io/badge/license-GPL--2.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![Wine](https://img.shields.io/badge/wine-5.0%2B-red) ![Photoshop](https://img.shields.io/badge/Photoshop-CC%202019-blue)
 
 **Adobe Photoshop CC 2019 nativ auf Linux mit Wine ausführen**
