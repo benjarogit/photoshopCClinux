@@ -1,3 +1,60 @@
+# Release v2.0.9 - Critical Hotfix: RAM Detection & Math Correction
+
+## 🐛 Critical Bug Fixes
+
+This hotfix release corrects two important issues discovered in v2.0.8 that affect RAM detection accuracy and completeness.
+
+### Bug Fixes
+
+#### 🔢 Fixed RAM Ceiling Division Formula
+- **Problem:** Used incorrect rounding formula `(MB + 512) / 1024` which rounds to nearest, not up
+- **Impact:** Systems with specific RAM amounts displayed incorrectly
+  - Example: 1025 MB showed as 1 GB instead of 2 GB
+  - Your system: 31995 MB now correctly shows 32 GB (was 31 GB)
+- **Fix:** Proper ceiling division: `(MB + 1023) / 1024`
+- **Math:** `ceiling(a/b) = (a + b - 1) / b`
+- **Affected:** `setup.sh`, `pre-check.sh`, `troubleshoot.sh`
+
+#### 🌍 Completed Locale Support in troubleshoot.sh
+- **Problem:** `troubleshoot.sh` RAM detection missed `LC_ALL=C` prefix
+- **Impact:** RAM detection failed on non-English systems (German, French, etc.)
+- **Fix:** Added `LC_ALL=C` to `free -m` command
+- **Now:** All three scripts (`setup.sh`, `pre-check.sh`, `troubleshoot.sh`) are fully locale-independent
+
+### Technical Details
+
+**Before (incorrect):**
+```bash
+# Rounds to nearest, not up
+TOTAL_RAM=$(( (TOTAL_RAM_MB + 512) / 1024 ))
+
+# Examples:
+1025 MB → 1 GB  ❌ (should be 2 GB)
+2049 MB → 2 GB  ❌ (should be 3 GB)
+```
+
+**After (correct):**
+```bash
+# Proper ceiling division
+TOTAL_RAM=$(( (TOTAL_RAM_MB + 1023) / 1024 ))
+
+# Examples:
+1025 MB → 2 GB  ✅
+2049 MB → 3 GB  ✅
+```
+
+### Files Modified
+- `setup.sh` - RAM display in banner (line 298)
+- `pre-check.sh` - RAM detection check (line 101)
+- `troubleshoot.sh` - RAM detection check (lines 290-293)
+
+### Why This Matters
+- **Accuracy:** Users see correct RAM amounts
+- **Consistency:** All scripts now use identical, mathematically correct formula
+- **Completeness:** 100% locale support across all system detection scripts
+
+---
+
 # Release v2.0.8 - Universal Locale Support & Visual Polish
 
 ## 🌍 International Compatibility & UI Improvements
