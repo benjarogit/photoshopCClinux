@@ -296,8 +296,8 @@ else
     check_error "RAM: ${TOTAL_RAM}GB (Zu wenig! Mindestens 4GB benötigt)"
 fi
 
-# Check available disk space
-AVAILABLE_SPACE=$(df -h "$HOME" | awk 'NR==2 {print $4}')
+# Check available disk space (force C locale for consistent output)
+AVAILABLE_SPACE=$(LC_ALL=C df -h "$HOME" | awk 'NR==2 {print $4}')
 check_ok "Verfügbarer Speicherplatz in /home: $AVAILABLE_SPACE"
 
 # Check GPU
@@ -368,4 +368,5 @@ echo ""
 echo "Weitere Hilfe: README.de.md oder GitHub Issues"
 echo "https://github.com/Gictorbit/photoshopCClinux/issues"
 echo ""
+
 

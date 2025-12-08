@@ -1,3 +1,132 @@
+# Release v2.0.8 - Universal Locale Support & Visual Polish
+
+## 🌍 International Compatibility & UI Improvements
+
+This release ensures the installer works flawlessly on **all Linux systems worldwide**, regardless of language settings, and adds final visual polish to the banner layout.
+
+### What's New
+
+#### 🌍 Universal Locale Support
+- ✅ **RAM Detection Now Works Worldwide** - Fixed RAM detection on systems with non-English locales
+  - Previously: Failed on German systems (showed "RAM konnte nicht ermittelt werden")
+  - Now: Uses `LC_ALL=C` to force English output from system commands
+  - Tested: German, French, Spanish, Italian, Portuguese, Japanese, Chinese, etc.
+  - Impact: `free`, `df`, `du` commands now work on **all** locales
+
+#### 🎨 Banner Visual Improvements
+- ✅ **Symmetrical Logo Layout** - All 9 menu options now have consistent visual alignment
+  - Empty logo line at top for balance
+  - Options 1-8 aligned with logo details
+  - Empty logo line between option 8 and 9 for symmetry
+  - Option 9 (Exit) properly aligned with bottom logo line
+  - Professional, balanced appearance
+
+### Technical Details
+
+**Locale-Independent System Commands:**
+```bash
+# OLD (locale-dependent):
+free -m | awk '/^Mem:|^Speicher:/{print $2}'
+df -BG "$HOME" | awk 'NR==2 {print $4}'
+
+# NEW (universal):
+LC_ALL=C free -m | awk '/^Mem:/{print $2}'
+LC_ALL=C df -BG "$HOME" | awk 'NR==2 {print $4}'
+```
+
+**Why LC_ALL=C?**
+- Forces English output on all systems
+- Standard practice in professional shell scripts
+- No hardcoded locale list needed
+- Works on any Linux distribution worldwide
+
+**Files Modified:**
+- `setup.sh` - `get_system_info()` function (RAM detection)
+- `pre-check.sh` - RAM, disk space, file size checks
+- `troubleshoot.sh` - Disk space check
+
+**Locale Examples:**
+- 🇩🇪 German: `Speicher:` / `Dateisystem` → `Mem:` / `Filesystem`
+- 🇫🇷 French: `Mémoire:` → `Mem:`
+- 🇪🇸 Spanish: `Memoria:` → `Mem:`
+- 🇯🇵 Japanese: `メモリ:` → `Mem:`
+- 🇨🇳 Chinese: `内存:` → `Mem:`
+
+### Bug Fixes
+- 🐛 **Fixed RAM Detection on German Systems** - No more "RAM konnte nicht ermittelt werden"
+- 🐛 **Fixed Banner Visual Alignment** - All menu options now properly aligned with logo
+- 🐛 **Fixed Disk Space Detection** - Now works on all language systems
+
+---
+
+# Release v2.0.7 - Internet Toggle Feature
+
+## 🚀 New Feature: One-Click Internet Control
+
+This release adds a convenient internet toggle option to the setup menu, making offline installation easier.
+
+### What's New
+- ✅ **Internet Toggle (Option 7)** - Turn WiFi on/off directly from the setup menu
+  - Displays current status: "Internet: ON " or "Internet: OFF"
+  - Uses `nmcli` to control WiFi radio
+  - Perfect for ensuring offline installation (prevents Adobe login prompts)
+  - Graceful fallback if `nmcli` is not available
+
+### Why Disable Internet?
+Adobe Creative Cloud installer tries to connect to Adobe servers during installation and may force a login. With **no internet**, the installer skips this check and installs offline without requiring an Adobe account.
+
+### Menu Changes
+- **Option 7:** Internet toggle (NEW)
+- **Option 8:** Language switcher (moved from 7)
+- **Option 9:** Exit (moved from 8)
+
+---
+
+# Release v2.0.6 - Critical Bug Fixes
+
+## 🐛 Bug Fix Release: Script Exit Codes, Distro Name Truncation & Pre-Check Issues
+
+This release fixes critical bugs discovered in v2.0.5 that could affect system detection, script error handling, and pre-installation checks.
+
+### Bug Fixes
+- 🐛 **Fixed `run_script()` Exit Code** - Script exit codes are now properly preserved when returning to the main directory
+  - Previously: `cd "$SCRIPT_DIR"` would mask script failures with its own exit code (0)
+  - Now: Exit code is captured before `cd` and explicitly returned to caller
+  - Impact: Error detection now works correctly for all script calls
+  
+- 🐛 **Fixed Distro Name Truncation Logic** - Smart truncation now validates that truncation actually reduces length
+  - Previously: Fallback truncation could expand short distro names (e.g., "Ubuntu" → "Ubunt..." is longer)
+  - Now: Validates `(new_length + 3) < original_length` before truncating
+  - Minimum 3 chars before "..." to ensure meaningful truncation
+  - If distro is too short to truncate effectively, leave unchanged (padding handles overflow)
+  - Impact: System info line never exceeds 74 characters, preserving display box formatting
+
+- 🐛 **Fixed Pre-Check RAM Detection** - RAM is now correctly detected and displayed on all systems
+  - Previously: Used `int($2/1024)` which returned 0 for systems with <1024MB RAM
+  - Now: Uses same rounding logic as `setup.sh`: `(ram_mb + 512) / 1024`
+  - Added validation check: `[ -n "$TOTAL_RAM" ] && [ "$TOTAL_RAM" -gt 0 ]` before comparisons
+  - Impact: Fixes "Ganzzahl erwartet" error on line 257, RAM now shows correctly (e.g., 1GB)
+
+- 🐛 **Fixed Pre-Check ANSI Colors** - Color codes are now properly displayed instead of showing raw escape sequences
+  - Previously: `echo` commands didn't interpret ANSI codes like `\033[1;33m`
+  - Now: Changed to `echo -e` for all lines containing color variables (`${YELLOW}`, `${BLUE}`, `${NC}`)
+  - Impact: Recommendations and commands now display in color (yellow warnings, blue commands)
+
+### Technical Details
+- **setup.sh:**
+  - `run_script()` now captures and returns script exit codes: `local exit_code=$?; return $exit_code`
+  - Distro truncation validates `(new_distro_len + 3) < ${#distro}` to ensure truncation reduces length
+  - Minimum 3-char distro name before "..." (e.g., "Arc..." for "Arch Linux")
+  - If truncation would expand or not help, distro name is left unchanged
+  - Padding automatically adjusts to fit within 74-char limit (negative padding → 0)
+
+- **pre-check.sh:**
+  - RAM calculation changed from `int($2/1024)` to `(ram_mb + 512) / 1024` (rounds up)
+  - Added validation: `[ -n "$TOTAL_RAM" ] && [ "$TOTAL_RAM" -gt 0 ]` before all comparisons
+  - Changed `echo` to `echo -e` for lines 147, 236, 240, 241, 251 (color code support)
+
+---
+
 # Release v2.0.5 - System Info Display & Integrated Tools
 
 ## 🚀 Major Update: Enhanced User Experience & System Integration
@@ -548,4 +677,5 @@ This release represents a complete overhaul of the installation process with foc
 **Release Date:** December 2024  
 **Version:** 2.0.0  
 **License:** GPL-2.0
+
 

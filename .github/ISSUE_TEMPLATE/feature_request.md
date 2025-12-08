@@ -51,3 +51,4 @@ Add any other context or information about the feature request here.
 - Automatic backup of Photoshop preferences
 - Support for custom Wine versions
 
+

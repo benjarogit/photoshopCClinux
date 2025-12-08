@@ -82,7 +82,8 @@ echo ""
 
 # Check 3: Disk Space
 echo "3. Überprüfe verfügbaren Speicherplatz..."
-HOME_SPACE=$(df -BG "$HOME" | awk 'NR==2 {print $4}' | sed 's/G//')
+# Force C locale for consistent output
+HOME_SPACE=$(LC_ALL=C df -BG "$HOME" | awk 'NR==2 {print $4}' | sed 's/G//')
 
 if [ "$HOME_SPACE" -ge 5 ]; then
     check_ok "Ausreichend Speicherplatz: ${HOME_SPACE}GB verfügbar (5GB benötigt)"
@@ -93,13 +94,21 @@ echo ""
 
 # Check 4: RAM
 echo "4. Überprüfe Arbeitsspeicher..."
-TOTAL_RAM=$(free -m | awk '/^Mem:/{print int($2/1024)}')
+# Force C locale for consistent output across all languages
+TOTAL_RAM_MB=$(LC_ALL=C free -m | awk '/^Mem:/{print $2}')
+# Only calculate if we got a valid number
+if [ -n "$TOTAL_RAM_MB" ] && [ "$TOTAL_RAM_MB" -gt 0 ]; then
+    TOTAL_RAM=$(( (TOTAL_RAM_MB + 512) / 1024 ))  # Round up to nearest GB
+    [ $TOTAL_RAM -eq 0 ] && TOTAL_RAM=1  # Minimum 1GB display
+else
+    TOTAL_RAM=""  # Mark as unknown if detection failed
+fi
 
 if [ -n "$TOTAL_RAM" ] && [ "$TOTAL_RAM" -ge 8 ]; then
     check_ok "RAM: ${TOTAL_RAM}GB (Optimal für Photoshop)"
 elif [ -n "$TOTAL_RAM" ] && [ "$TOTAL_RAM" -ge 4 ]; then
     check_warning "RAM: ${TOTAL_RAM}GB (Funktioniert, aber 8GB empfohlen)"
-elif [ -n "$TOTAL_RAM" ]; then
+elif [ -n "$TOTAL_RAM" ] && [ "$TOTAL_RAM" -gt 0 ]; then
     check_error "RAM: ${TOTAL_RAM}GB (Zu wenig! Mindestens 4GB benötigt)"
 else
     check_warning "RAM konnte nicht ermittelt werden"
@@ -113,8 +122,8 @@ PHOTOSHOP_INSTALLER="/home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/ph
 if [ -f "$PHOTOSHOP_INSTALLER" ]; then
     check_ok "Photoshop Installer gefunden: Set-up.exe"
     
-    # Check size
-    INSTALLER_SIZE=$(du -h "$PHOTOSHOP_INSTALLER" | cut -f1)
+    # Check size (force C locale for consistent output)
+    INSTALLER_SIZE=$(LC_ALL=C du -h "$PHOTOSHOP_INSTALLER" | cut -f1)
     echo "   Größe: $INSTALLER_SIZE"
     
     # Check if packages exist
@@ -143,7 +152,7 @@ echo ""
 echo "6. Überprüfe Internet-Verbindung..."
 if ping -c 1 -W 2 google.com &> /dev/null; then
     check_warning "Internet-Verbindung aktiv"
-    echo "   ${YELLOW}EMPFEHLUNG: Deaktiviere Internet für die Installation!${NC}"
+    echo -e "   ${YELLOW}EMPFEHLUNG: Deaktiviere Internet für die Installation!${NC}"
     echo "   Befehl: nmcli radio wifi off"
 else
     check_ok "Keine Internet-Verbindung (PERFEKT für Installation!)"
@@ -232,11 +241,11 @@ if [ $CHECKS_FAILED -eq 0 ]; then
     echo "Nächste Schritte:"
     echo ""
     echo "1. Internet deaktivieren (EMPFOHLEN):"
-    echo "   ${BLUE}nmcli radio wifi off${NC}"
+    echo -e "   ${BLUE}nmcli radio wifi off${NC}"
     echo ""
     echo "2. Installation starten:"
-    echo "   ${BLUE}cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5${NC}"
-    echo "   ${BLUE}./setup.sh${NC}"
+    echo -e "   ${BLUE}cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5${NC}"
+    echo -e "   ${BLUE}./setup.sh${NC}"
     echo ""
     echo "3. Option 1 wählen (install photoshop CC)"
     echo ""
@@ -247,14 +256,14 @@ if [ $CHECKS_FAILED -eq 0 ]; then
     echo "   - 10-20 Minuten warten"
     echo ""
     echo "5. Nach Installation Internet wieder aktivieren:"
-    echo "   ${BLUE}nmcli radio wifi on${NC}"
+    echo -e "   ${BLUE}nmcli radio wifi on${NC}"
     echo ""
     
     if [ $CHECKS_WARNING -gt 0 ]; then
         echo "⚠ HINWEISE zu den Warnungen:"
         echo ""
         
-        if [ "$TOTAL_RAM" -lt 8 ]; then
+        if [ -n "$TOTAL_RAM" ] && [ "$TOTAL_RAM" -gt 0 ] && [ "$TOTAL_RAM" -lt 8 ]; then
             echo "• RAM: Mit ${TOTAL_RAM}GB funktioniert Photoshop, aber größere"
             echo "  Dateien können langsam sein. 8GB sind optimal."
             echo ""
@@ -322,4 +331,5 @@ else
     
     exit 1
 fi
+
 

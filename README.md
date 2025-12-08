@@ -652,3 +652,4 @@ Based on [photoshopCClinux](https://github.com/Gictorbit/photoshopCClinux) by Gi
 **Made with ❤️ for the Linux community**
 
 **Star ⭐ this repo if it helped you!**
+

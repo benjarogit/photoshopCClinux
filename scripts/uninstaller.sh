@@ -99,3 +99,4 @@ function ask_question() {
 # Load paths with skip_validation=true to allow uninstall even if directories are deleted
 load_paths "true"
 main
+

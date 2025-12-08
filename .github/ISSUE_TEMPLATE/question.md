@@ -39,3 +39,4 @@ Add any other relevant information here.
 - PNG export broken → Should be fixed in v2.0.1+
 - Screen lag → Check Wine registry tweaks in launcher
 
+

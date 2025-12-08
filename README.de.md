@@ -434,3 +434,4 @@ Basiert auf [photoshopCClinux](https://github.com/Gictorbit/photoshopCClinux) vo
 **Mit ❤️ für die Linux-Community**
 
 **Gib diesem Repo einen Stern ⭐ wenn es dir geholfen hat!**
+

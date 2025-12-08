@@ -81,3 +81,4 @@ If applicable, add screenshots or screen recordings showing the performance issu
 3. Try different CPU topology values
 4. Use lighter brushes / fewer layers
 
+

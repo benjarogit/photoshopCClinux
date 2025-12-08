@@ -16,6 +16,9 @@
 #               https://github.com/Gictorbit/photoshopCClinux
 ################################################################################
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Detect system language (only if not already set by user)
 detect_language() {
     # Skip detection if LANG_CODE is already set (e.g., by manual toggle)
@@ -152,11 +155,25 @@ function main() {
         ;;
     3)  
         msg_pre_check
-        run_script "pre-check.sh" "pre-check.sh"
+        # Pre-check is in root directory - use script directory
+        local precheck_path="$SCRIPT_DIR/pre-check.sh"
+        if [ -f "$precheck_path" ]; then
+            chmod +x "$precheck_path"
+            bash "$precheck_path"
+        else
+            error "pre-check.sh not found at $precheck_path"
+        fi
         ;;
     4)  
         msg_troubleshoot
-        run_script "troubleshoot.sh" "troubleshoot.sh"
+        # Troubleshoot is in root directory - use script directory
+        local troubleshoot_path="$SCRIPT_DIR/troubleshoot.sh"
+        if [ -f "$troubleshoot_path" ]; then
+            chmod +x "$troubleshoot_path"
+            bash "$troubleshoot_path"
+        else
+            error "troubleshoot.sh not found at $troubleshoot_path"
+        fi
         ;;
     5)  
         msg_run_winecfg
@@ -167,6 +184,12 @@ function main() {
         run_script "scripts/uninstaller.sh" "uninstaller.sh"
         ;;
     7)  
+        # Toggle Internet
+        toggle_internet
+        wait_second 2
+        main
+        ;;
+    8)  
         # Toggle language
         if [ "$LANG_CODE" = "de" ]; then
             LANG_CODE="en"
@@ -179,7 +202,7 @@ function main() {
         wait_second 2
         main
         ;;
-    8)  
+    9)  
         msg_exit
         exitScript
         ;;
@@ -198,8 +221,43 @@ function run_script() {
     else
         msg_not_found "$script_name"
     fi
-    cd "./scripts/" && bash $script_name
+    
+    # Change to scripts directory, run script, then return to script directory
+    cd "$SCRIPT_DIR/scripts/" && bash "$script_name"
+    local exit_code=$?  # Capture script exit code before cd
+    cd "$SCRIPT_DIR"  # Always return to script directory
+    
     unset script_path
+    return $exit_code  # Preserve the script's exit code
+}
+
+function toggle_internet() {
+    if ! command -v nmcli &> /dev/null; then
+        if [ "$LANG_CODE" = "de" ]; then
+            warning "nmcli nicht gefunden - kann Internet nicht umschalten"
+            echo "Manuell: nmcli radio wifi off/on"
+        else
+            warning "nmcli not found - cannot toggle internet"
+            echo "Manual: nmcli radio wifi off/on"
+        fi
+        return 1
+    fi
+    
+    if nmcli radio wifi | grep -q "enabled"; then
+        nmcli radio wifi off
+        if [ "$LANG_CODE" = "de" ]; then
+            echo -e "\033[1;32m✓\033[0m Internet deaktiviert (PERFEKT für Installation!)"
+        else
+            echo -e "\033[1;32m✓\033[0m Internet disabled (PERFECT for installation!)"
+        fi
+    else
+        nmcli radio wifi on
+        if [ "$LANG_CODE" = "de" ]; then
+            echo -e "\033[1;32m✓\033[0m Internet aktiviert"
+        else
+            echo -e "\033[1;32m✓\033[0m Internet enabled"
+        fi
+    fi
 }
 
 function wait_second() {
@@ -213,13 +271,13 @@ function wait_second() {
 function read_input() {
     while true ;do
         read -p "$(msg_choose_option)" choose
-        if [[ "$choose" =~ (^[1-8]$) ]];then
+        if [[ "$choose" =~ (^[1-9]$) ]];then
             break
         fi
         if [ "$LANG_CODE" = "de" ]; then
-            warning "Wähle eine Zahl zwischen 1 und 8"
+            warning "Wähle eine Zahl zwischen 1 und 9"
         else
-            warning "choose a number between 1 to 8"
+            warning "choose a number between 1 to 9"
         fi
     done
 
@@ -234,8 +292,11 @@ function get_system_info() {
     # Get system information for display
     local distro=$(grep "^PRETTY_NAME" /etc/os-release 2>/dev/null | cut -d'"' -f2 || echo "Unknown Linux")
     local kernel=$(uname -r | cut -d'-' -f1)
-    local ram_mb=$(free -m | awk '/^Mem:/{print $2}')
-    local ram_gb=$((ram_mb / 1024))
+    # Force C locale for consistent output across all languages
+    local ram_mb=$(LC_ALL=C free -m | awk '/^Mem:/{print $2}')
+    # Round up RAM to nearest GB (avoid showing 0GB)
+    local ram_gb=$(( (ram_mb + 512) / 1024 ))
+    [ $ram_gb -eq 0 ] && ram_gb=1  # Minimum 1GB display
     local wine_ver=$(wine --version 2>/dev/null | cut -d'-' -f2 || echo "not installed")
     
     echo "$distro|$kernel|${ram_gb}GB|$wine_ver"
@@ -274,11 +335,23 @@ function banner() {
     local ram=$(echo "$sys_info" | cut -d'|' -f3)
     local wine_ver=$(echo "$sys_info" | cut -d'|' -f4)
     
-    # Dynamic copyright year (current year)
+    # Dynamic copyright year (start year - current year)
+    # Note: This fork started in 2025, so start_year is 2025 (not 2024 from original project)
+    local start_year="2025"
     local current_year=$(date +%Y)
-    local copyright="© ${current_year} benjarogit | GPL-3.0 License"
+    local copyright="© ${start_year}-${current_year} benjarogit | GPL-3.0 License"
     
     # Define menu options based on language
+    # Check internet status for menu display
+    local internet_status=""
+    if command -v nmcli &> /dev/null; then
+        if nmcli radio wifi | grep -q "enabled"; then
+            internet_status="ON "
+        else
+            internet_status="OFF"
+        fi
+    fi
+    
     if [ "$LANG_CODE" = "de" ]; then
         local opt1="1- Photoshop CC installieren"
         local opt2="2- Camera Raw v12 installieren"
@@ -286,8 +359,9 @@ function banner() {
         local opt4="4- Fehlerbehebung                  (Troubleshoot)"
         local opt5="5- Wine konfigurieren              (winecfg)"
         local opt6="6- Photoshop deinstallieren"
-        local opt7="7- Sprache: Deutsch                (L)"
-        local opt8="8- Beenden"
+        local opt7="7- Internet: ${internet_status}                    (Toggle)"
+        local opt8="8- Sprache: Deutsch                (L)"
+        local opt9="9- Beenden"
         local sys_label="System:"
     else
         local opt1="1- Install photoshop CC"
@@ -296,8 +370,9 @@ function banner() {
         local opt4="4- Troubleshooting                 (Fix issues)"
         local opt5="5- configure wine                  (winecfg)"
         local opt6="6- uninstall photoshop"
-        local opt7="7- Language: English               (L)"
-        local opt8="8- exit"
+        local opt7="7- Internet: ${internet_status}                    (Toggle)"
+        local opt8="8- Language: English               (L)"
+        local opt9="9- exit"
         local sys_label="System:"
     fi
     
@@ -313,6 +388,7 @@ function banner() {
     local pad6=$((text_width - ${#opt6})); [ $pad6 -lt 0 ] && pad6=0
     local pad7=$((text_width - ${#opt7})); [ $pad7 -lt 0 ] && pad7=0
     local pad8=$((text_width - ${#opt8})); [ $pad8 -lt 0 ] && pad8=0
+    local pad9=$((text_width - ${#opt9})); [ $pad9 -lt 0 ] && pad9=0
     
     opt1="${opt1}$(printf '%*s' $pad1 '')"
     opt2="${opt2}$(printf '%*s' $pad2 '')"
@@ -322,16 +398,28 @@ function banner() {
     opt6="${opt6}$(printf '%*s' $pad6 '')"
     opt7="${opt7}$(printf '%*s' $pad7 '')"
     opt8="${opt8}$(printf '%*s' $pad8 '')"
+    opt9="${opt9}$(printf '%*s' $pad9 '')"
     
-    # System info line (truncate distro if too long)
-    local max_distro_len=30
-    if [ ${#distro} -gt $max_distro_len ]; then
-        distro="${distro:0:$max_distro_len}..."
-    fi
+    # System info line - width is 74 chars (75 from empty line - 1 for leading space in echo)
+    local sys_info_width=74
     local sys_info_line="${sys_label} ${distro} | Kernel ${kernel} | RAM ${ram} | Wine ${wine_ver}"
-    local sys_info_len=${#sys_info_line}
-    local sys_padding=$((75 - sys_info_len))
-    if [ $sys_padding -lt 0 ]; then sys_padding=0; fi
+    
+    # Truncate distro if line is too long
+    if [ ${#sys_info_line} -gt $sys_info_width ]; then
+        local overflow=$((${#sys_info_line} - sys_info_width))
+        local new_distro_len=$((${#distro} - overflow - 3))  # -3 for "..."
+        
+        # Only truncate if result would be shorter than original distro (avoid expanding short names)
+        if [ $new_distro_len -gt 3 ] && [ $((new_distro_len + 3)) -lt ${#distro} ]; then
+            distro="${distro:0:$new_distro_len}..."
+            sys_info_line="${sys_label} ${distro} | Kernel ${kernel} | RAM ${ram} | Wine ${wine_ver}"
+        fi
+        # If distro is already very short, leave it unchanged - padding will be reduced to fit
+    fi
+    
+    # Pad to exact 74 chars
+    local sys_padding=$((sys_info_width - ${#sys_info_line}))
+    [ $sys_padding -lt 0 ] && sys_padding=0
     sys_info_line="${sys_info_line}$(printf '%*s' $sys_padding '')"
     
     # Print colored banner with echo -e (bash/sh compatible)
@@ -341,15 +429,15 @@ function banner() {
     echo -e "${C_BLUE}  ███████████████████████████${C_RESET}                                                                    ${C_CYAN}┃${C_RESET}"
     echo -e "${C_BLUE}  ██${C_RESET}                       ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt1}${C_CYAN}┃${C_RESET}"
     echo -e "${C_BLUE}  ██  ███████▆▃${C_RESET}            ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt2}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███   ▝██▙${C_RESET}           ${C_BLUE}██${C_RESET}                                                                    ${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███    ███${C_RESET}           ${C_BLUE}██${C_RESET}      ${C_GREEN}${opt3}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███   ▟██▛▗▟████▙${C_RESET}    ${C_BLUE}██${C_RESET}      ${C_GREEN}${opt4}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███████▛  ██▋${C_RESET}        ${C_BLUE}██${C_RESET}                                                                    ${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███       ▝▜█████▙${C_RESET}   ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt5}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███             ██▌${C_RESET}  ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt6}${C_CYAN}┃${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███   ▝██▙${C_RESET}           ${C_BLUE}██${C_RESET}      ${C_GREEN}${opt3}${C_CYAN}┃${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███    ███${C_RESET}           ${C_BLUE}██${C_RESET}      ${C_GREEN}${opt4}${C_CYAN}┃${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███   ▟██▛▗▟████▙${C_RESET}    ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt5}${C_CYAN}┃${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███████▛  ██▋${C_RESET}        ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt6}${C_CYAN}┃${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███       ▝▜█████▙${C_RESET}   ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt7}${C_CYAN}┃${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███             ██▌${C_RESET}  ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt8}${C_CYAN}┃${C_RESET}"
     echo -e "${C_BLUE}  ██  ███        ▗▟████▛${C_RESET}   ${C_BLUE}██${C_RESET}                                                                    ${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██${C_RESET}                       ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt7}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ███████████████████████████${C_RESET}      ${C_YELLOW}${opt8}${C_CYAN}┃${C_RESET}"
+    echo -e "${C_BLUE}  ██${C_RESET}                       ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt9}${C_CYAN}┃${C_RESET}"
+    echo -e "${C_BLUE}  ███████████████████████████${C_RESET}                                                                    ${C_CYAN}┃${C_RESET}"
     echo -e "${C_CYAN}                     ┃${C_RESET}                                                                           ${C_CYAN}┃${C_RESET}"
     echo -e "${C_CYAN}                     ┗━━━━━━━━━━━━━━━┫ ${C_WHITE}https://github.com/benjarogit/photoshopCClinux${C_CYAN} ┣━━━━━━━━━━┛${C_RESET}"
     echo -e "                     ${C_WHITE}${copyright}${C_RESET}"
@@ -367,3 +455,4 @@ function warning() {
 }
 
 main
+
