@@ -286,14 +286,24 @@ echo "────────────────────────�
 echo "6. Performance-Check"
 echo "─────────────────────────────────────────────────────────────"
 
-# Check available RAM
-TOTAL_RAM=$(free -g | awk '/^Mem:/{print $2}')
-if [ "$TOTAL_RAM" -ge 8 ]; then
-    check_ok "RAM: ${TOTAL_RAM}GB (Ausreichend)"
-elif [ "$TOTAL_RAM" -ge 4 ]; then
-    check_warning "RAM: ${TOTAL_RAM}GB (Minimum, 8GB empfohlen)"
+# Check available RAM (force C locale for consistent output)
+TOTAL_RAM_MB=$(LC_ALL=C free -m | awk '/^Mem:/{print $2}')
+# Only calculate if we got a valid number
+if [ -n "$TOTAL_RAM_MB" ] && [ "$TOTAL_RAM_MB" -gt 0 ]; then
+    TOTAL_RAM=$(( (TOTAL_RAM_MB + 512) / 1024 ))  # Round up to nearest GB
+    [ $TOTAL_RAM -eq 0 ] && TOTAL_RAM=1  # Minimum 1GB display
 else
+    TOTAL_RAM=""  # Mark as unknown if detection failed
+fi
+
+if [ -n "$TOTAL_RAM" ] && [ "$TOTAL_RAM" -ge 8 ]; then
+    check_ok "RAM: ${TOTAL_RAM}GB (Ausreichend)"
+elif [ -n "$TOTAL_RAM" ] && [ "$TOTAL_RAM" -ge 4 ]; then
+    check_warning "RAM: ${TOTAL_RAM}GB (Minimum, 8GB empfohlen)"
+elif [ -n "$TOTAL_RAM" ] && [ "$TOTAL_RAM" -gt 0 ]; then
     check_error "RAM: ${TOTAL_RAM}GB (Zu wenig! Mindestens 4GB benötigt)"
+else
+    check_warning "RAM konnte nicht ermittelt werden"
 fi
 
 # Check available disk space (force C locale for consistent output)
