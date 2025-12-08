@@ -36,6 +36,12 @@ QUICK_START_DE.md
 README_DE.md
 INSTALLATION_DE.md
 
+# Development/Announcement files (not for end users)
+ANNOUNCEMENT.md
+REDDIT_POST.md
+CODE_FIXES.md
+gitpush.sh
+
 # ============================================================
 # Wine/Installation Output
 # ============================================================
