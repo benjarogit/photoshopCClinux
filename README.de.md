@@ -1,0 +1,396 @@
+# Adobe Photoshop CC 2019 Installation für Linux
+
+![Lizenz](https://img.shields.io/badge/license-GPL--2.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![Wine](https://img.shields.io/badge/wine-5.0%2B-red) ![Photoshop](https://img.shields.io/badge/Photoshop-CC%202019-blue)
+
+**Adobe Photoshop CC 2019 nativ auf Linux mit Wine ausführen**
+
+Optimiert für CachyOS und alle großen Linux-Distributionen.
+
+---
+
+## 🌍 Sprachen / Languages
+
+- 🇩🇪 **Deutsche Dokumentation** - Diese Seite
+- 🇬🇧 **[English Documentation](README.md)** - Complete guide
+
+---
+
+## ⚠️ WICHTIGER HINWEIS
+
+### Du musst Photoshop-Installationsdateien selbst bereitstellen
+
+**Dieses Repository enthält KEINE Photoshop-Installationsdateien.**
+
+Du musst:
+1. **Eine gültige Adobe Photoshop CC 2019 Lizenz besitzen**
+2. **Den Installer selbst beschaffen** (siehe [Wie bekomme ich Photoshop?](#wie-bekomme-ich-photoshop))
+3. **Dateien im `photoshop/` Verzeichnis platzieren** (siehe [photoshop/README.md](photoshop/README.md))
+
+### ⚡ Versions-Kompatibilität
+
+**Dieser Installer ist für Photoshop CC 2019 (v20.x) optimiert.**
+
+Laut [Wine AppDB](https://appdb.winehq.org/objectManager.php?iId=17&sClass=application) haben verschiedene Photoshop-Versionen unterschiedliche Kompatibilität:
+
+- ✅ **CC 2019 (v20.0)** - Funktioniert mit Workarounds (GPU deaktiviert) - **Dieser Installer**
+- ⚠️ **CC 2024** - Eingeschränkte Unterstützung, viele GPU-Probleme
+- 🏆 **CS3-CS6** - Bessere Wine-Kompatibilität, aber ältere Features
+- ❌ **CC 2020+** - Erhöhte Online-Anforderungen, nicht empfohlen
+
+**Warum CC 2019?**
+- Letzte Version vor starker Creative Cloud Integration
+- Gutes Feature-Set für professionelle Arbeit
+- Funktioniert zuverlässig mit deaktivierter GPU
+- Offline-Installation möglich
+
+**Alternative Versionen:**
+Falls du Zugriff auf ältere Versionen hast, haben **Photoshop CS6 (13.0)** oder **CS3 (10.0)** bessere Wine-Bewertungen (Silver/Platinum), aber weniger moderne Features.
+
+### Wie bekomme ich Photoshop?
+
+#### Option 1: Offiziell von Adobe (Empfohlen)
+- Download über Adobe Creative Cloud
+- Offline-Installer für Photoshop CC 2019 (v20.x) verwenden
+
+#### Option 2: Von vorhandener Windows-Installation
+- Falls du Photoshop unter Windows hast, extrahiere die Installationsdateien
+- Windows-Pfad: `C:\Program Files\Adobe\Adobe Photoshop CC 2019\`
+
+**⚖️ Legal:** Du benötigst eine gültige Lizenz. Dieses Script automatisiert nur die Wine-Installation.
+
+---
+
+## 🚀 Schnellstart
+
+Diese Version verwendet **lokale Installationsdateien** anstatt Downloads.
+
+## ⚠️ Systemanforderungen
+
+### Erforderliche Pakete
+
+```bash
+# Für Arch Linux / CachyOS:
+sudo pacman -S wine winetricks
+
+# Für Ubuntu/Debian:
+sudo apt install wine winetricks
+
+# Für Fedora:
+sudo dnf install wine winetricks
+```
+
+**Wichtig:** Die folgenden Pakete werden benötigt:
+- `wine` (Version 5.0 oder höher empfohlen)
+- `winetricks`
+- `md5sum` (normalerweise vorinstalliert)
+
+### System-Spezifikationen
+
+- ✅ 64-bit Linux Distribution
+- ✅ Mindestens 5 GB freier Speicherplatz in `/home`
+- ✅ 4 GB RAM (8 GB empfohlen)
+- ✅ Grafikkarte: Intel, Nvidia oder AMD (mit aktuellen Treibern)
+
+## 📦 Installationsdateien
+
+Die Photoshop-Installationsdateien befinden sich in:
+```
+/home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/photoshop/
+```
+
+Diese enthalten:
+- `Set-up.exe` - Adobe Photoshop CC 2019 Installer
+- `packages/` - Adobe Installationspakete
+- `products/` - Photoshop-Produktdateien und Sprachpakete
+
+## 🔧 Installation
+
+### Schritt 1: Internet deaktivieren (WICHTIG!)
+
+Für eine reibungslose Installation wird empfohlen, die Internetverbindung temporär zu deaktivieren:
+
+```bash
+# WLAN deaktivieren
+nmcli radio wifi off
+
+# Oder Ethernet deaktivieren
+sudo ip link set <interface> down
+```
+
+### Schritt 2: Setup ausführen
+
+```bash
+cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5
+chmod +x setup.sh
+./setup.sh
+```
+
+### Schritt 3: Im Menü Option 1 wählen
+
+```
+┌─────────────────────────────────────────────┐
+│  1) install photoshop CC                    │
+│  2) install camera raw                      │
+│  3) configure wine prefix (winecfg)         │
+│  4) uninstall photoshop CC                  │
+│  5) exit                                    │
+└─────────────────────────────────────────────┘
+```
+
+Wähle **1** für die Photoshop-Installation.
+
+### Schritt 4: Installations-Prozess
+
+Der Installer wird:
+1. ✅ Wine-Prefix erstellen (`~/.photoshopCCV19/prefix`)
+2. ✅ Mono und Gecko installieren (bestätige mit OK)
+3. ✅ Windows 10 Umgebung konfigurieren
+4. ✅ Notwendige Komponenten installieren (vcrun, fonts, etc.)
+5. ✅ Adobe Photoshop Setup starten
+
+**Im Adobe Setup-Fenster:**
+- Wähle "Installieren"
+- Behalte den Standard-Pfad (`C:\Program Files\Adobe\...`)
+- Wähle deine Sprache (z.B. `de_DE` für Deutsch)
+- Warte 10-20 Minuten auf die Installation
+
+### Schritt 5: Internet wieder aktivieren
+
+```bash
+# WLAN aktivieren
+nmcli radio wifi on
+```
+
+## 🎨 Photoshop starten
+
+Nach erfolgreicher Installation kannst du Photoshop auf drei Arten starten:
+
+1. **Terminal-Befehl:**
+   ```bash
+   photoshop
+   ```
+
+2. **Anwendungsmenü:** 
+   Suche nach "Adobe Photoshop CC" in deinem Desktop-Menü
+
+3. **Direkter Pfad:**
+   ```bash
+   ~/.photoshopCCV19/launcher/launcher.sh
+   ```
+
+**Hinweis:** Der erste Start kann 1-2 Minuten dauern. Das ist normal!
+
+## 🐛 Bekannte Probleme und Lösungen
+
+Diese Lösungen basieren auf den [GitHub Issues](https://github.com/Gictorbit/photoshopCClinux/issues):
+
+### Problem 1: Photoshop stürzt beim Start ab
+
+**Lösung:** GPU-Beschleunigung deaktivieren
+1. Öffne Photoshop
+2. Gehe zu `Bearbeiten > Voreinstellungen > Leistung` (oder `Strg+K`)
+3. Deaktiviere "Grafikprozessor verwenden"
+4. Starte Photoshop neu
+
+**Alternative:** Launcher anpassen
+```bash
+# Editiere ~/.photoshopCCV19/launcher/launcher.sh
+# Diese Zeilen sind bereits aktiviert:
+export MESA_GL_VERSION_OVERRIDE=3.3
+export __GL_SHADER_DISK_CACHE=0
+```
+
+### Problem 2: Fehler "VCRUNTIME140.dll fehlt"
+
+**Lösung:** Visual C++ Runtime neu installieren
+```bash
+cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5
+./setup.sh
+# Wähle Option 3 (winecfg)
+# Oder manuell:
+WINEPREFIX=~/.photoshopCCV19/prefix winetricks vcrun2015
+```
+
+### Problem 3: Liquify-Tool funktioniert nicht
+
+**Ursache:** GPU-Probleme mit Wine
+
+**Lösung 1:** CPU-Rendering verwenden
+- In Photoshop: `Bearbeiten > Voreinstellungen > Leistung`
+- Deaktiviere "OpenCL verwenden"
+
+**Lösung 2:** Grafiktreiber aktualisieren
+```bash
+# Für Nvidia:
+sudo pacman -S nvidia nvidia-utils
+
+# Für AMD:
+sudo pacman -S mesa vulkan-radeon
+
+# Für Intel:
+sudo pacman -S mesa vulkan-intel
+```
+
+### Problem 4: Schriftarten sehen verschwommen aus
+
+**Lösung:** Font-Smoothing anpassen
+```bash
+WINEPREFIX=~/.photoshopCCV19/prefix winetricks fontsmooth=rgb
+```
+
+### Problem 5: Installation hängt bei 100%
+
+**Lösung:** 
+1. Warte 2-3 Minuten
+2. Falls nichts passiert: Installer-Fenster mit `Alt+F4` schließen
+3. Überprüfe ob Photoshop trotzdem installiert wurde:
+   ```bash
+   ls ~/.photoshopCCV19/prefix/drive_c/Program\ Files/Adobe/
+   ```
+
+### Problem 6: "ARKServiceAdmin" Fehler während Installation
+
+**Lösung:** 
+- Dieser Fehler kann **ignoriert** werden
+- Klicke auf "Ignorieren" oder "Fortfahren"
+- Die Installation funktioniert trotzdem
+
+### Problem 7: Adobe Creative Cloud Login-Fenster erscheint
+
+**Lösung:**
+- **NICHT** anmelden!
+- Fenster schließen oder "Offline arbeiten" wählen
+- Photoshop funktioniert ohne Login
+
+## 🎥 Adobe Camera Raw installieren (Optional)
+
+Falls du RAW-Fotos bearbeiten möchtest:
+
+```bash
+cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5
+./setup.sh
+# Wähle Option 2
+```
+
+Camera Raw wird dann von Adobe heruntergeladen (~400 MB).
+
+## 🗑️ Deinstallation
+
+```bash
+cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5
+./setup.sh
+# Wähle Option 4 (Uninstall)
+```
+
+Dies entfernt:
+- Wine-Prefix (`~/.photoshopCCV19/`)
+- Desktop-Eintrag
+- Photoshop-Befehl (`/usr/local/bin/photoshop`)
+
+## 📊 Performance-Tipps
+
+### 1. Wine-Staging verwenden (empfohlen)
+
+Wine-Staging bietet bessere Leistung:
+```bash
+# Arch/CachyOS:
+sudo pacman -S wine-staging
+
+# Ubuntu (wine-staging PPA):
+sudo add-apt-repository ppa:cybermax-dexter/sdl2-backport
+sudo apt install --install-recommends wine-staging
+```
+
+### 2. CSMT aktivieren (für Wine-Staging)
+
+```bash
+WINEPREFIX=~/.photoshopCCV19/prefix winetricks csmt
+```
+
+### 3. Virtual Desktop verwenden
+
+Bei Vollbild-Problemen:
+```bash
+cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5
+./setup.sh
+# Option 3: Configure wine prefix
+# → Graphics Tab → Enable "Emulate a virtual desktop"
+# → Setze Auflösung (z.B. 1920x1080)
+```
+
+### 4. RAM für Wine erhöhen
+
+Editiere `~/.photoshopCCV19/launcher/launcher.sh` und füge hinzu:
+```bash
+export WINE_HEAP=512m
+export WINE_SHARED_HEAP=128m
+```
+
+## 🔍 Logs und Debugging
+
+### Log-Dateien Speicherorte:
+
+- **Setup-Log:** `~/.photoshopCCV19/setuplog.log`
+- **Wine-Fehler:** `~/.photoshopCCV19/wine-error.log`
+- **Runtime-Log:** `~/.photoshopCCV19/photoshop-runtime.log`
+
+### Logs anzeigen:
+
+```bash
+# Setup-Log
+cat ~/.photoshopCCV19/setuplog.log
+
+# Wine-Fehler
+tail -n 50 ~/.photoshopCCV19/wine-error.log
+
+# Runtime-Fehler
+tail -f ~/.photoshopCCV19/photoshop-runtime.log
+```
+
+### Debug-Modus aktivieren:
+
+```bash
+# Setze Debug-Level
+export WINEDEBUG=+all
+photoshop
+```
+
+## 🌐 Weitere Ressourcen
+
+- **Original Repository:** https://github.com/Gictorbit/photoshopCClinux
+- **GitHub Issues:** https://github.com/Gictorbit/photoshopCClinux/issues
+- **Wine AppDB:** https://appdb.winehq.org/objectManager.php?sClass=application&iId=17
+- **ProtonDB (für Gaming, aber auch nützlich):** https://www.protondb.com/
+
+### Hilfreiche Guides:
+- https://www.linuxnest.com/how-to-run-photoshop-on-linux-an-ultimate-guide/
+- https://thelinuxcode.com/install_adobe_photoshop_linux/
+
+## 🤝 Support und Community
+
+Falls du Probleme hast, die hier nicht aufgeführt sind:
+
+1. **Überprüfe GitHub Issues:** Viele Probleme wurden bereits gelöst
+2. **Erstelle ein neues Issue:** Mit detaillierten Logs und Systeminformationen
+3. **Wine Forums:** https://forum.winehq.org/
+
+## 📝 Wichtige Hinweise
+
+- ⚠️ Dies ist **keine offizielle Adobe-Installation**
+- ⚠️ Einige Funktionen (wie 3D, Cloud-Sync) funktionieren möglicherweise nicht
+- ⚠️ Halte deine Wine-Version aktuell für beste Kompatibilität
+- ✅ Die meisten Core-Photoshop-Funktionen funktionieren einwandfrei
+- ✅ Plugins können installiert werden (in `~/.photoshopCCV19/prefix/drive_c/...`)
+
+## 🎉 Viel Erfolg!
+
+Die Installation sollte problemlos funktionieren. Bei Fragen oder Problemen schaue zuerst in die "Bekannte Probleme" Sektion.
+
+**Tipp:** Deaktiviere GPU-Beschleunigung in Photoshop, wenn du Stabilitätsprobleme hast!
+
+---
+
+**Version:** Angepasst für lokale Installation (Dezember 2024)  
+**Basiert auf:** [Gictorbit/photoshopCClinux](https://github.com/Gictorbit/photoshopCClinux)  
+**Lizenz:** GPL-2.0
+

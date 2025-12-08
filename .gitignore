@@ -1,0 +1,59 @@
+# Photoshop CC Linux - GitIgnore
+
+# ============================================================
+# Installation Files (User must provide these)
+# ============================================================
+photoshop/Set-up.exe
+photoshop/packages/
+photoshop/products/
+photoshop/resources/
+photoshop/replacement/
+
+# Keep structure but ignore content
+!photoshop/.gitkeep
+!photoshop/README.md
+
+# ============================================================
+# Generated/Temporary Files
+# ============================================================
+*.log
+*.backup
+*.bak
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ============================================================
+# User-specific Test/Development Files
+# ============================================================
+DATEIEN_UEBERSICHT.txt
+check-system.sh
+validate-changes.sh
+CHANGES.md
+QUICK_START_DE.md
+README_DE.md
+INSTALLATION_DE.md
+
+# ============================================================
+# Wine/Installation Output
+# ============================================================
+wine-error.log
+setuplog.log
+photoshop-runtime.log
+
+# ============================================================
+# IDE/Editor Files
+# ============================================================
+.vscode/
+.idea/
+*.sublime-*
+.cursor/
+
+# ============================================================
+# OS-specific
+# ============================================================
+.directory
+desktop.ini
+
