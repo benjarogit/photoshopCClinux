@@ -198,24 +198,40 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
+### 6. Im Menü Option 1 wählen
+
+```
+┌─────────────────────────────────────────────┐
+│  1) Photoshop CC installieren              │
+│  2) Camera Raw v12 installieren            │
+│  3) System-Vorprüfung                       │
+│  4) Fehlerbehebung                          │
+│  5) Wine konfigurieren                      │
+│  6) Photoshop deinstallieren                │
+│  7) Internet: ON/OFF                        │
+│  8) Sprache: Deutsch/English                │
+│  9) Beenden                                 │
+└─────────────────────────────────────────────┘
+```
+
 Wähle **Option 1** (Photoshop CC installieren)
 
 ![Setup Screenshot](images/setup-screenshot-de.png)
 
-### 6. Im Adobe Setup-Fenster
+### 7. Im Adobe Setup-Fenster
 
 - Klicke auf "Installieren"
 - Behalte den Standard-Pfad (`C:\Program Files\Adobe\...`)
 - Wähle deine Sprache (z.B. de_DE oder en_US)
 - Warte 10-20 Minuten
 
-### 7. Internet wieder aktivieren
+### 8. Internet wieder aktivieren
 
 ```bash
 nmcli radio wifi on
 ```
 
-### 8. Photoshop starten
+### 9. Photoshop starten
 
 ```bash
 photoshop
@@ -223,7 +239,7 @@ photoshop
 
 Oder suche nach "Adobe Photoshop CC" in deinem Anwendungsmenü.
 
-### 9. GPU deaktivieren (Wichtig!)
+### 10. GPU deaktivieren (Wichtig!)
 
 Für Stabilität:
 1. In Photoshop: `Bearbeiten > Voreinstellungen > Leistung` (Strg+K)

@@ -198,24 +198,40 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
+### 6. In the Menu, Select Option 1
+
+```
+┌─────────────────────────────────────────────┐
+│  1) Install photoshop CC                   │
+│  2) Install camera raw v12                 │
+│  3) Pre-installation check                 │
+│  4) Troubleshooting                        │
+│  5) Configure wine                         │
+│  6) Uninstall photoshop                    │
+│  7) Internet: ON/OFF                       │
+│  8) Language: English/Deutsch              │
+│  9) Exit                                   │
+└─────────────────────────────────────────────┘
+```
+
 Select **Option 1** (install photoshop CC)
 
 ![Setup Screenshot](images/setup-screenshot.png)
 
-### 6. In Adobe Setup Window
+### 7. In Adobe Setup Window
 
 - Click "Install"
 - Keep default path (`C:\Program Files\Adobe\...`)
 - Select your language (e.g., en_US or de_DE)
 - Wait 10-20 minutes
 
-### 7. Re-enable Internet
+### 8. Re-enable Internet
 
 ```bash
 nmcli radio wifi on
 ```
 
-### 8. Launch Photoshop
+### 9. Launch Photoshop
 
 ```bash
 photoshop
@@ -223,7 +239,7 @@ photoshop
 
 Or search for "Adobe Photoshop CC" in your application menu.
 
-### 9. Disable GPU (Important!)
+### 10. Disable GPU (Important!)
 
 For stability:
 1. In Photoshop: `Edit > Preferences > Performance` (Ctrl+K)
@@ -497,7 +513,7 @@ tail -n 30 ~/.photoshopCCV19/photoshop-runtime.log
 #### Wine Configuration
 
 ```bash
-./setup.sh  # Select Option 3
+./setup.sh  # Select Option 5
 ```
 
 Recommended settings:
@@ -539,7 +555,7 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks --force vcrun2015 msxml6
 
 5. **Use Virtual Desktop** (if performance issues)
    ```bash
-   ./setup.sh  # Option 3 → Graphics → Enable virtual desktop
+   ./setup.sh  # Option 5 → Graphics → Enable virtual desktop
    ```
 
 ### Expected Performance
@@ -562,7 +578,7 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks --force vcrun2015 msxml6
 ### Complete Removal
 
 ```bash
-./setup.sh  # Select Option 4
+./setup.sh  # Select Option 6
 ```
 
 This removes:
