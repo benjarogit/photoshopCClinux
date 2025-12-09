@@ -1684,11 +1684,34 @@ function main() {
     log "Aktueller PATH: $PATH"
     
     #config wine prefix and install mono and gecko automatic
-    echo -e "${C_YELLOW}⚠${C_RESET} ${C_CYAN}please install mono and gecko packages then click on OK button${C_RESET}"
+    if [ "$LANG_CODE" = "de" ]; then
+        log "${C_YELLOW}→${C_RESET} ${C_CYAN}Konfiguriere Wine-Prefix...${C_RESET}"
+        log "${C_GRAY}     Es öffnet sich ein Fenster - bitte klicke auf 'OK'${C_RESET}"
+        log "${C_GRAY}     (Mono und Gecko werden automatisch installiert)${C_RESET}"
+        echo ""
+        echo -e "${C_YELLOW}⚠${C_RESET} ${C_CYAN}WICHTIG: Es öffnet sich gleich ein Fenster!${C_RESET}"
+        echo -e "${C_GRAY}   Bitte klicke einfach auf 'OK' - Mono und Gecko werden automatisch installiert.${C_RESET}"
+        echo ""
+        sleep 2
+    else
+        log "${C_YELLOW}→${C_RESET} ${C_CYAN}Configuring Wine prefix...${C_RESET}"
+        log "${C_GRAY}     A window will open - please click 'OK'${C_RESET}"
+        log "${C_GRAY}     (Mono and Gecko will be installed automatically)${C_RESET}"
+        echo ""
+        echo -e "${C_YELLOW}⚠${C_RESET} ${C_CYAN}IMPORTANT: A window will open shortly!${C_RESET}"
+        echo -e "${C_GRAY}   Please just click 'OK' - Mono and Gecko will be installed automatically.${C_RESET}"
+        echo ""
+        sleep 2
+    fi
+    
     "$winecfg_binary" 2> "$SCR_PATH/wine-error.log"
     if [ $? -eq 0 ];then
-        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}prefix configured...${C_RESET}"
-        sleep 5
+        if [ "$LANG_CODE" = "de" ]; then
+            show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}Prefix konfiguriert...${C_RESET}"
+        else
+            show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}Prefix configured...${C_RESET}"
+        fi
+        sleep 2
     else
         error "prefix config failed :("
     fi
@@ -1819,6 +1842,12 @@ function main() {
     # Workaround für bekannte Wine-Probleme (GitHub Issue #34)
     log "${C_YELLOW}→${C_RESET} ${C_CYAN}$MSG_DLL${C_RESET}"
     winetricks -q dxvk_async=disabled d3d11=native >> "$LOG_FILE" 2>&1
+    
+    # CRITICAL: Ensure d3d11.dll override is set (required for Photoshop 2021+)
+    # winetricks may not always set this correctly, so we set it explicitly
+    log "${C_YELLOW}  →${C_RESET} ${C_GRAY}Setze d3d11.dll Override (erforderlich für Photoshop 2021+)...${C_RESET}"
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v d3d11 /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || log "  ⚠ d3d11 Override konnte nicht gesetzt werden"
+    log "${C_GREEN}  ✓${C_RESET} ${C_CYAN}d3d11.dll Override gesetzt${C_RESET}"
     
     # Zusätzliche Performance & Rendering Fixes
     show_message "${C_YELLOW}→${C_RESET} ${C_CYAN}$([ "$LANG_CODE" = "de" ] && echo "Konfiguriere Wine-Registry für bessere Performance..." || echo "Configuring Wine registry for better performance...")${C_RESET}"

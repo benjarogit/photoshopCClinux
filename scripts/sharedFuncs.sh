@@ -370,6 +370,26 @@ function launcher() {
         
         # Mache Desktop-Entry ausführbar
         chmod +x "$desktop_entry_dest" || warning "can't make desktop entry executable"
+        
+        # CRITICAL: Remove incorrect Wine-generated desktop entries
+        # Wine creates desktop entries in ~/.local/share/applications/wine/Programs/ that use .lnk files
+        # These don't work correctly and should be removed
+        local wine_apps_dir="$HOME/.local/share/applications/wine"
+        if [ -d "$wine_apps_dir" ]; then
+            find "$wine_apps_dir" -type f -name "*Photoshop*" -o -name "*photoshop*" 2>/dev/null | while IFS= read -r entry; do
+                if [ -f "$entry" ]; then
+                    log_debug "Removing incorrect Wine desktop entry: $entry"
+                    rm -f "$entry" 2>/dev/null || true
+                fi
+            done
+            # Also remove empty directories
+            find "$wine_apps_dir" -type d -empty -delete 2>/dev/null || true
+        fi
+        
+        # Update desktop database to refresh menu
+        if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+        fi
     else
         error "desktop entry Not Found"
     fi
