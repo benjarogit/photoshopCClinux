@@ -1,4 +1,4 @@
-# Adobe Photoshop Installer für Linux
+# Adobe Photoshop Installer für Linux ![Status](https://img.shields.io/badge/status-aktive%20entwicklung-yellow)
 
 > [!NOTE]
 > **Experimenteller Status - Work in Progress**
@@ -15,6 +15,8 @@
 > ✅ **Adobe Photoshop CC 2021 v22.0.0.35 x64** wurde erfolgreich getestet und funktioniert bestätigt mit der **Wine Standard** Installationsmethode.
 > 
 > ✅ **Proton GE Unterstützung**: Proton GE Installation funktioniert jetzt erfolgreich! Benutzer können Photoshop mit Proton GE installieren und ausführen. Proton GE wird automatisch installiert, falls es nicht gefunden wird.
+> 
+> ✅ **Getestet auf**: CachyOS Linux (Arch-basiert) mit KDE Desktop-Umgebung
 > 
 > ⚠️ **Bekanntes Problem**: Icon-Anzeigeproblem in KDE Desktop-Umgebung - Icons erscheinen möglicherweise nicht im Startmenü oder Desktop-Verknüpfung. Workaround: Desktop-Sitzung neu starten oder abmelden und wieder anmelden.
 
