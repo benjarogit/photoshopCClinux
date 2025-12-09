@@ -43,10 +43,13 @@ export LC_ALL="${LC_ALL:-$LANG}"
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Initialize LANG_CODE (will be set by detect_language if not already set)
+LANG_CODE="${LANG_CODE:-}"
+
 # Detect system language (only if not already set by user)
 detect_language() {
     # Skip detection if LANG_CODE is already set (e.g., by manual toggle)
-    if [ -z "$LANG_CODE" ]; then
+    if [ -z "${LANG_CODE:-}" ]; then
         if [[ "$LANG" =~ ^de ]]; then
             LANG_CODE="de"
         else
