@@ -1,180 +1,180 @@
 # Changelog
 
-Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
+All notable changes to this project will be documented in this file.
 
 ---
 
 ## [v2.2.0] - 2025-12-09
 
-### 🔒 Sicherheitsverbesserungen
-- **Verbesserte Sicherheit bei Downloads**: Downloads werden jetzt nur noch von vertrauenswürdigen Quellen akzeptiert (HTTPS, bekannte Domains)
-- **Robustere Pfad-Validierung**: Verhindert Probleme bei Installationen in ungewöhnlichen Verzeichnissen
-- **Sicherere Umgebungsvariablen**: Verbesserte Validierung von System-Pfaden
+### 🔒 Security Improvements
+- **Enhanced Download Security**: Downloads are now only accepted from trusted sources (HTTPS, known domains)
+- **Robust Path Validation**: Prevents issues when installing in unusual directories
+- **Safer Environment Variables**: Improved validation of system paths
 
-### 🐛 Bugfixes
-- **Proton GE Erkennung**: Verbesserte Erkennung und Konfiguration von Proton GE Installationen
-- **Pfad-Validierung**: Korrigierte Validierung bei der Wine-Version Auswahl
-- **POSIX-Kompatibilität**: Verbesserte Kompatibilität mit verschiedenen Shell-Umgebungen
+### 🐛 Bug Fixes
+- **Proton GE Detection**: Improved detection and configuration of Proton GE installations
+- **Path Validation**: Fixed validation in Wine version selection
+- **POSIX Compatibility**: Improved compatibility with various shell environments
 
-### 📋 Verbesserungen
-- **Code-Qualität**: Umfassende Code-Überarbeitung für bessere Stabilität
-- **Fehlerbehandlung**: Verbesserte Fehlerbehandlung in allen Scripts
-- **Dokumentation**: Aktualisierte READMEs mit aktuellen Informationen
+### 📋 Improvements
+- **Code Quality**: Comprehensive code review for better stability
+- **Error Handling**: Improved error handling across all scripts
+- **Documentation**: Updated READMEs with current information
 
 ---
 
 ## [v2.1.0] - 2024-12-08
 
-### 🧪 Neue Features
-- **Experimentelle Proton GE Unterstützung**: Optionales Support für Proton GE (Community-Fork von Valve's Proton)
-  - Automatische Erkennung von Proton GE aus Steam-Verzeichnis oder System-Installation
-  - Interaktive Auswahl zwischen Proton GE und Standard Wine während der Installation
-  - Automatische Installation von Proton GE via AUR (Arch-basierte Systeme)
-  - ⚠️ **Experimentell**: Bitte Probleme in GitHub Issues melden
+### 🧪 New Features
+- **Experimental Proton GE Support**: Optional support for Proton GE (community fork of Valve's Proton)
+  - Automatic detection of Proton GE from Steam directory or system installation
+  - Interactive selection between Proton GE and Standard Wine during installation
+  - Automatic installation of Proton GE via AUR (Arch-based systems)
+  - ⚠️ **Experimental**: Please report issues in GitHub Issues
 
-### 🐛 Kritische Bugfixes
-- **Adobe Installer "Weiter"-Button reagiert nicht**: 
-  - Umfassende IE-Engine Konfiguration für bessere Kompatibilität
-  - Optionale IE8 Installation (empfohlen, dauert 5-10 Minuten)
-  - Verbesserte DLL-Overrides für maximale Kompatibilität
-  - Klare Anweisungen für Tastatur-Navigation falls Buttons nicht reagieren
+### 🐛 Critical Bug Fixes
+- **Adobe Installer "Next" Button Not Responding**: 
+  - Comprehensive IE engine configuration for better compatibility
+  - Optional IE8 installation (recommended, takes 5-10 minutes)
+  - Improved DLL overrides for maximum compatibility
+  - Clear instructions for keyboard navigation if buttons don't respond
 
-- **Proton GE Konfiguration**: System-weite Proton GE Installation wird jetzt korrekt erkannt und konfiguriert
+- **Proton GE Configuration**: System-wide Proton GE installation is now correctly detected and configured
 
-- **Menü-Validierung**: Korrigierte Validierung bei nicht-konsekutiven Optionen
+- **Menu Validation**: Fixed validation for non-consecutive options
 
-### 🔧 Verbesserungen
-- **Installationsprozess**: Detaillierteres Logging der Wine/Proton Version Auswahl
-- **Klare Nachrichten**: Erklärt welche Wine-Version für Installer vs. Photoshop verwendet wird
-- **IE8 Prompt**: Klare Erklärung warum IE8 Installation empfohlen wird
-- **Fehlerbehandlung**: Bessere Fehlermeldungen wenn Proton GE Installation fehlschlägt
+### 🔧 Improvements
+- **Installation Process**: More detailed logging of Wine/Proton version selection
+- **Clear Messages**: Explains which Wine version is used for installer vs. Photoshop
+- **IE8 Prompt**: Clear explanation why IE8 installation is recommended
+- **Error Handling**: Better error messages if Proton GE installation fails
 
 ---
 
 ## [v2.0.9] - 2024-12-07
 
-### 🐛 Kritische Bugfixes
-- **RAM-Berechnung korrigiert**: Korrekte Rundung nach oben (Ceiling Division)
-  - Systeme mit spezifischen RAM-Mengen werden jetzt korrekt angezeigt
-  - Beispiel: 1025 MB zeigt jetzt 2 GB (vorher 1 GB)
+### 🐛 Critical Bug Fixes
+- **Fixed RAM Calculation**: Correct ceiling division (rounding up)
+  - Systems with specific RAM amounts are now displayed correctly
+  - Example: 1025 MB now shows 2 GB (was 1 GB)
   
-- **Locale-Unterstützung in troubleshoot.sh**: RAM-Erkennung funktioniert jetzt auch auf nicht-englischen Systemen
+- **Locale Support in troubleshoot.sh**: RAM detection now works on non-English systems
 
 ---
 
 ## [v2.0.8] - 2024-12-06
 
-### 🌍 Internationale Kompatibilität
-- **Universelle Locale-Unterstützung**: RAM-Erkennung funktioniert jetzt weltweit auf allen Systemen
-  - Funktioniert auf deutschen, französischen, spanischen, italienischen, portugiesischen, japanischen, chinesischen Systemen, etc.
-  - Verwendet `LC_ALL=C` für konsistente System-Befehle
+### 🌍 International Compatibility
+- **Universal Locale Support**: RAM detection now works worldwide on all systems
+  - Works on German, French, Spanish, Italian, Portuguese, Japanese, Chinese systems, etc.
+  - Uses `LC_ALL=C` for consistent system commands
 
-### 🎨 Visuelle Verbesserungen
-- **Symmetrisches Logo-Layout**: Alle 9 Menü-Optionen haben jetzt konsistente visuelle Ausrichtung
+### 🎨 Visual Improvements
+- **Symmetrical Logo Layout**: All 9 menu options now have consistent visual alignment
 
 ---
 
 ## [v2.0.7] - 2024-12-05
 
-### 🚀 Neue Features
-- **Internet-Toggle (Option 7)**: WiFi direkt aus dem Setup-Menü ein/ausschalten
-  - Zeigt aktuellen Status: "Internet: ON" oder "Internet: OFF"
-  - Perfekt für Offline-Installation (verhindert Adobe Login-Aufforderungen)
+### 🚀 New Features
+- **Internet Toggle (Option 7)**: Turn WiFi on/off directly from setup menu
+  - Shows current status: "Internet: ON" or "Internet: OFF"
+  - Perfect for offline installation (prevents Adobe login prompts)
 
 ---
 
 ## [v2.0.6] - 2024-12-04
 
-### 🐛 Bugfixes
-- **Script Exit-Codes**: Exit-Codes werden jetzt korrekt weitergegeben
-- **Distro-Name Kürzung**: Intelligente Kürzung validiert jetzt dass Kürzung tatsächlich Länge reduziert
-- **Pre-Check RAM-Erkennung**: RAM wird jetzt korrekt erkannt und angezeigt
-- **Pre-Check ANSI-Farben**: Farbcodes werden jetzt korrekt angezeigt
+### 🐛 Bug Fixes
+- **Script Exit Codes**: Exit codes are now correctly passed through
+- **Distro Name Truncation**: Smart truncation now validates that truncation actually reduces length
+- **Pre-Check RAM Detection**: RAM is now correctly detected and displayed
+- **Pre-Check ANSI Colors**: Color codes are now correctly displayed
 
 ---
 
 ## [v2.0.5] - 2024-12-03
 
-### 🚀 Haupt-Update: Verbesserte Benutzererfahrung
+### 🚀 Major Update: Enhanced User Experience
 
-#### System-Informationen Anzeige
-- **Echtzeit System-Info**: Banner zeigt jetzt: Distribution, Kernel-Version, RAM, Wine-Version
-- **Intelligente Kürzung**: Lange Distributions-Namen werden automatisch gekürzt
-- **Dynamisches Padding**: System-Info Zeile passt sich an Inhaltslänge an
+#### System Information Display
+- **Real-Time System Info**: Banner now shows: Distribution, Kernel version, RAM, Wine version
+- **Smart Truncation**: Long distribution names are automatically truncated
+- **Dynamic Padding**: System info line adapts to content length
 
-#### Integrierte Tools (Neue Menü-Optionen)
-- **Option 3: Pre-Installation Check**: Validiert System-Anforderungen vor Installation
-- **Option 4: Troubleshooting**: Automatische Diagnose und Reparatur für häufige Probleme
-- **Benutzer-Führung**: Tools sind klar als "empfohlen" markiert
+#### Integrated Tools (New Menu Options)
+- **Option 3: Pre-Installation Check**: Validates system requirements before installation
+- **Option 4: Troubleshooting**: Automatic diagnosis and repair for common issues
+- **User Guidance**: Tools are clearly marked as "recommended"
 
-#### Dynamisches Copyright-Jahr
-- **Auto-Erkennung**: Copyright-Jahr aktualisiert sich automatisch
+#### Dynamic Copyright Year
+- **Auto-Detection**: Copyright year updates automatically
 
-#### ANSI-Farben Banner
-- **Schöne Farben**: Cyan Rahmen, Magenta Titel, Blau Logo, Gelb Menü-Optionen, Grün für hilfreiche Tools
-- **Perfekte Ausrichtung**: Banner schließt korrekt mit richtigem Padding
+#### ANSI Color Banner
+- **Beautiful Colors**: Cyan frame, Magenta title, Blue logo, Yellow menu options, Green for helpful tools
+- **Perfect Alignment**: Banner closes correctly with proper padding
 
 ---
 
 ## [v2.0.3] - 2024-12-02
 
-### 🔧 Kritischer Fix: Banner jetzt wirklich mehrsprachig
-- **Dynamische Menü-Optionen**: Banner verwendet jetzt Template-Platzhalter die zur Laufzeit ersetzt werden
-- **Korrekte GitHub URL**: Banner zeigt jetzt `benjarogit/photoshopCClinux` statt alter URL
-- **Echte Mehrsprach-Unterstützung**: Menü-Optionen ändern sich jetzt basierend auf System-Sprache
+### 🔧 Critical Fix: Banner Now Truly Multilingual
+- **Dynamic Menu Options**: Banner now uses template placeholders that are replaced at runtime
+- **Correct GitHub URL**: Banner now shows `benjarogit/photoshopCClinux` instead of old URL
+- **True Multilingual Support**: Menu options now change based on system language
 
 ---
 
 ## [v2.0.2] - 2024-12-01
 
-### 🌍 Mehrsprach-Unterstützung
-- **Automatische Spracherkennung**: Erkennt System-Sprache (`$LANG`)
-- **Deutsche Übersetzung**: Alle Installations-Nachrichten auf Deutsch
-- **Englischer Fallback**: Standardmäßig Englisch für nicht-deutsche Systeme
+### 🌍 Multi-Language Support
+- **Automatic Language Detection**: Detects system language (`$LANG`)
+- **German Translation**: All installation messages in German
+- **English Fallback**: Defaults to English for non-German systems
 
 ---
 
 ## [v2.0.1] - 2024-11-30
 
-### 🔧 Performance & Stabilität Updates
+### 🔧 Performance & Stability Updates
 
-#### Performance-Verbesserungen
-- **Issue #161 - Bildschirm-Update Verzögerung**: 80% schnellere Bildschirm-Updates
-- **Issue #135 - Zoom-Verzögerung**: 60% bessere Zoom-Reaktionszeit
+#### Performance Improvements
+- **Issue #161 - Screen Update Lag**: 80% faster screen updates
+- **Issue #135 - Zoom Lag**: 60% better zoom responsiveness
 
-#### Stabilitäts-Fixes
-- **Issue #206 - Schwarzer Bildschirm**: 95% Reduktion von schwarzen Bildschirmen
-- **Issue #209 - Kann nicht als PNG speichern**: PNG-Export funktioniert jetzt
-- **Issue #56 - UI-Skalierung inkonsistent**: 90% bessere UI-Skalierungs-Konsistenz
+#### Stability Fixes
+- **Issue #206 - Black Screen**: 95% reduction in black screens
+- **Issue #209 - Cannot Save as PNG**: PNG export now works
+- **Issue #56 - UI Scaling Inconsistent**: 90% better UI scaling consistency
 
 ---
 
 ## [v2.0.0] - 2024-11-29
 
-### 🎉 Haupt-Update: Lokale Installation Support
+### 🎉 Major Update: Local Installation Support
 
-#### Kern-Änderungen
-- ✅ **Lokale Installation**: Verwendet lokale Photoshop CC 2019 Dateien aus `photoshop/` Verzeichnis (keine Downloads)
-- ✅ **Windows 10 Support**: Upgrade von Windows 7 zu Windows 10 für bessere Kompatibilität
-- ✅ **Multi-Distribution**: Optimiert für CachyOS, Arch, Ubuntu, Fedora und alle großen Distros
-- ✅ **Zweisprachige Dokumentation**: Vollständige Docs auf Englisch und Deutsch
-- ✅ **Pre-Installation Check**: Neues `pre-check.sh` validiert System vor Installation
-- ✅ **Automatisches Troubleshooting**: Neues `troubleshoot.sh` diagnostiziert und repariert häufige Probleme
+#### Core Changes
+- ✅ **Local Installation**: Uses local Photoshop CC 2019 files from `photoshop/` directory (no downloads)
+- ✅ **Windows 10 Support**: Upgraded from Windows 7 to Windows 10 for better compatibility
+- ✅ **Multi-Distribution**: Optimized for CachyOS, Arch, Ubuntu, Fedora and all major distros
+- ✅ **Bilingual Documentation**: Complete docs in English and German
+- ✅ **Pre-Installation Check**: New `pre-check.sh` validates system before installation
+- ✅ **Automatic Troubleshooting**: New `troubleshoot.sh` diagnoses and repairs common issues
 
-#### GitHub Issues behoben
-- 🐛 **#12, #56**: ARKServiceAdmin Fehler → Dokumentation klärt dass diese ignoriert werden können
-- 🐛 **#23**: Font-Rendering Probleme → Automatische fontsmooth=rgb Installation
-- 🐛 **#34**: DLL Override Probleme → WINEDLLOVERRIDES in Launcher konfiguriert
-- 🐛 **#45, #67**: GPU-Abstürze → Auto-Deaktivierung GPU, MESA_GL_VERSION_OVERRIDE Workaround
-- 🐛 **#78**: Extension-Abstürze → Problematische Plugins werden während Installation automatisch entfernt
+#### GitHub Issues Fixed
+- 🐛 **#12, #56**: ARKServiceAdmin errors → Documentation clarifies these can be ignored
+- 🐛 **#23**: Font rendering issues → Automatic fontsmooth=rgb installation
+- 🐛 **#34**: DLL override problems → WINEDLLOVERRIDES configured in launcher
+- 🐛 **#45, #67**: GPU crashes → Auto-disable GPU, MESA_GL_VERSION_OVERRIDE workaround
+- 🐛 **#78**: Extension crashes → Problematic plugins automatically removed during installation
 
-#### Installation Verbesserungen
-- ⚡ Schnellere Installation (keine Downloads, verwendet lokale Dateien)
-- 🛡️ Robuster (behandelt bekannte Fehler automatisch)
-- 🎯 Bessere Fehlermeldungen (auf Englisch oder Deutsch)
-- 🔍 Detailliertes Logging für Debugging
-- 🚀 Post-Installation Optimierung (GPU Workarounds, Plugin Cleanup)
+#### Installation Improvements
+- ⚡ Faster installation (no downloads, uses local files)
+- 🛡️ More robust (handles known errors automatically)
+- 🎯 Better error messages (in English or German)
+- 🔍 Detailed logging for debugging
+- 🚀 Post-installation optimization (GPU workarounds, plugin cleanup)
 
 ---
 
-**Vollständiger Changelog:** Siehe Commit-Historie für detaillierte Änderungen
+**Full Changelog:** See commit history for detailed changes
