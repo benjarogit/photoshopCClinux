@@ -9,6 +9,13 @@
 > 
 > Your feedback helps make this project better for everyone! 🙏
 
+> [!IMPORTANT]
+> **Verified Working Version**
+> 
+> ✅ **Adobe Photoshop CC 2021 v22.0.0.35 x64** has been successfully tested and confirmed working with **Wine Standard** installation method.
+> 
+> ⚠️ **Proton GE Support**: We are actively working on improving Proton GE compatibility. While Proton GE is available as an option, it is still being refined and tested. For the most stable experience, we currently recommend using **Wine Standard** installation.
+
 ![Photoshop on Linux](images/Screenshot.png)
 
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![Wine](https://img.shields.io/badge/wine-5.0%2B-red) ![Photoshop](https://img.shields.io/badge/Photoshop-CC-blue)
