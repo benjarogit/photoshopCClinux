@@ -208,10 +208,27 @@ main() {
     local found_any=false
     for entry in "${desktop_entries[@]}"; do
         if [ -f "$entry" ]; then
-            rm "$entry" 2>/dev/null && found_any=true
-            log "Entfernt: $entry" 2>/dev/null || true
+            if rm "$entry" 2>/dev/null; then
+                found_any=true
+                if [ "$LANG_CODE" = "de" ]; then
+                    log "Entfernt: $entry" 2>/dev/null || true
+                else
+                    log "Removed: $entry" 2>/dev/null || true
+                fi
+            fi
         fi
     done
+    
+    # Also remove empty Wine directories if they exist
+    if [ -d "$HOME/.local/share/applications/wine/Programs" ]; then
+        # Check if Programs directory is empty or only contains empty subdirectories
+        if [ -z "$(find "$HOME/.local/share/applications/wine/Programs" -mindepth 1 -maxdepth 1 -type f 2>/dev/null)" ]; then
+            # Remove empty Programs directory
+            rmdir "$HOME/.local/share/applications/wine/Programs" 2>/dev/null || true
+            # If wine directory is also empty, remove it
+            rmdir "$HOME/.local/share/applications/wine" 2>/dev/null || true
+        fi
+    fi
     
     if [ "$found_any" = false ]; then
         msg_desktop_not_found
