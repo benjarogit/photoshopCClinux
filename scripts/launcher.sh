@@ -36,9 +36,9 @@ else
 fi
 export LC_ALL="${LC_ALL:-$LANG}"
 
-# WINAPPS-TECHNIK: Parameter werden akzeptiert (für "Öffnen mit")
-# Dateien können als Parameter übergeben werden: launcher.sh /path/to/file.psd
-# Keine Parameter-Prüfung mehr - Dateien werden später verarbeitet
+# WINAPPS-TECHNIQUE: Parameters are accepted (for "Open with")
+# Files can be passed as parameters: launcher.sh /path/to/file.psd
+# No parameter checking anymore - files will be processed later
 
 # Get the directory where this script is located (resolves symlinks)
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" || echo "$0")")" && pwd)"
@@ -64,16 +64,16 @@ if [[ "$WINE_PREFIX" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|
 fi
 export WINEPREFIX="$WINE_PREFIX"
 
-# Workarounds für bekannte Probleme (GitHub Issues)
+# Workarounds for known issues (GitHub Issues)
 
-# Fix für GPU-Probleme (Issue #45, #67)
+# Fix for GPU issues (Issue #45, #67)
 export MESA_GL_VERSION_OVERRIDE=3.3
 export __GL_SHADER_DISK_CACHE=0
 
-# Fix für Font-Rendering (Issue #23)
+# Fix for font rendering (Issue #23)
 export FREETYPE_PROPERTIES="truetype:interpreter-version=35"
 
-# Fix für DLL-Probleme (Issue #34, #56)
+# Fix for DLL issues (Issue #34, #56)
 export WINEDLLOVERRIDES="winemenubuilder.exe=d"
 
 # Performance-Optimierungen (Issue #135 - Zoom lag)
@@ -81,20 +81,20 @@ export WINE_CPU_TOPOLOGY="4:2"  # Optimal CPU usage
 export __GL_THREADED_OPTIMIZATIONS=1  # Better OpenGL performance
 export __GL_YIELD="USLEEP"  # Reduce input lag
 
-# Fix für Screen Update Issues (Issue #161 - Undo/Redo lag)
+# Fix for screen update issues (Issue #161 - Undo/Redo lag)
 export CSMT=enabled  # Command Stream Multi-Threading
 
-# Prüfe Wine-Konfiguration
+# Check Wine configuration
 if [ ! -d "$WINE_PREFIX" ]; then
     echo "FEHLER: Wine-Prefix nicht gefunden: $WINE_PREFIX"
     notify-send "Photoshop CC" "Wine-Prefix nicht gefunden! Bitte Photoshop neu installieren." -i "error"
     exit 1
 fi
 
-# Suche nach Photoshop.exe in verschiedenen möglichen Pfaden
+# Search for Photoshop.exe in various possible paths
 PHOTOSHOP_EXE=""
 
-# Mögliche Installationspfade (dynamisch - alle unterstützten Versionen)
+# Possible installation paths (dynamic - all supported versions)
 POSSIBLE_PATHS=(
     "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop CC 2021/Photoshop.exe"
     "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop 2022/Photoshop.exe"
@@ -146,15 +146,15 @@ echo ""
 echo "🔄 Photoshop wird gestartet..."
 notify-send "Photoshop CC" "Photoshop CC wird gestartet..." -i "photoshopicon" 2>/dev/null || true
 
-# WINAPPS-TECHNIK: Dateien übergeben (wenn als Parameter übergeben)
-# Konvertiere Linux-Pfade zu Windows-Pfaden für Wine
+# WINAPPS-TECHNIQUE: Pass files (if passed as parameters)
+# Convert Linux paths to Windows paths for Wine
 wine_args=()
 if [ $# -gt 0 ]; then
     for file in "$@"; do
         if [ -f "$file" ] || [ -d "$file" ]; then
-            # Konvertiere Linux-Pfad zu Windows-Pfad für Wine
+            # Convert Linux path to Windows path for Wine
             abs_path=$(readlink -f "$file" 2>/dev/null || echo "$file")
-            # Wine mapped /home -> Z:/
+            # Wine maps /home -> Z:/
             # Ersetze /home/user -> Z:/home/user, dann / -> \
             wine_path=$(echo "$abs_path" | sed "s|^/|Z:/|" | sed 's|/|\\|g')
             wine_args+=("$wine_path")
@@ -164,8 +164,8 @@ if [ $# -gt 0 ]; then
     done
 fi
 
-# Starte Photoshop mit Wine (mit Dateien als Parameter, falls vorhanden)
-# WINAPPS-TECHNIK: Progress-Anzeige während des Starts
+# Start Photoshop with Wine (with files as parameters, if available)
+# WINAPPS-TECHNIQUE: Progress display during startup
 echo "⏳ Initialisiere Wine-Umgebung..."
 log "Starte Photoshop: $PHOTOSHOP_EXE"
 
