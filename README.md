@@ -1,12 +1,12 @@
-# Adobe Photoshop CC 2019 Installer for Linux
+# Adobe Photoshop Installer for Linux
 
 ![Photoshop on Linux](images/Screenshot.png)
 
-![License](https://img.shields.io/badge/license-GPL--2.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![Wine](https://img.shields.io/badge/wine-5.0%2B-red) ![Photoshop](https://img.shields.io/badge/Photoshop-CC%202019-blue)
+![License](https://img.shields.io/badge/license-GPL--3.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![Wine](https://img.shields.io/badge/wine-5.0%2B-red) ![Photoshop](https://img.shields.io/badge/Photoshop-CC-blue)
 
-**Run Adobe Photoshop CC 2019 natively on Linux using Wine**
+**Run Adobe Photoshop natively on Linux using Wine**
 
-Optimized for CachyOS and all major Linux distributions.
+A simple, automated installer that helps you set up Photoshop on Linux. Works on CachyOS, Arch, Ubuntu, Fedora, and all major Linux distributions.
 
 ---
 
@@ -578,20 +578,42 @@ sudo rm /usr/local/bin/photoshop
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please:
+**We need your help!** This project is made better by contributions from the community.
 
+### How You Can Help
+
+#### 🐛 Report Bugs
+Found something that doesn't work? Let us know!
+- [Open a GitHub Issue](https://github.com/benjarogit/photoshopCClinux/issues)
+- Include: Linux distro, Wine version, error logs, steps to reproduce
+- Even if you're not sure it's a bug - report it anyway!
+
+#### 💡 Suggest Features
+Have an idea to make this better?
+- [Open a Feature Request](https://github.com/benjarogit/photoshopCClinux/issues)
+- Describe what you'd like to see
+- Explain why it would be helpful
+
+#### 🔧 Share Fixes & Workarounds
+Found a solution to a problem?
+- Share it in the [GitHub Issues](https://github.com/benjarogit/photoshopCClinux/issues)
+- Help others who have the same problem
+- Your experience helps everyone!
+
+#### 📝 Improve Documentation
+Found something unclear in the README?
+- [Open an Issue](https://github.com/benjarogit/photoshopCClinux/issues) or submit a pull request
+- Help make this easier for beginners
+- Translate to other languages
+
+#### 💻 Code Contributions
+Want to contribute code?
 1. Fork the repository
 2. Create a feature branch
-3. Test your changes
-4. Submit a pull request
+3. Test your changes thoroughly
+4. Submit a pull request with a clear description
 
-### Reporting Issues
-
-When reporting bugs, include:
-- Linux distribution and version
-- Wine version (`wine --version`)
-- Error logs from `~/.photoshopCCV19/wine-error.log`
-- Steps to reproduce
+**Every contribution, big or small, makes this project better! 🙏**
 
 ---
 

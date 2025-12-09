@@ -1,12 +1,12 @@
-# Adobe Photoshop CC 2019 Installation für Linux
+# Adobe Photoshop Installation für Linux
 
 ![Photoshop unter Linux](images/Screenshot.png)
 
-![Lizenz](https://img.shields.io/badge/license-GPL--2.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![Wine](https://img.shields.io/badge/wine-5.0%2B-red) ![Photoshop](https://img.shields.io/badge/Photoshop-CC%202019-blue)
+![Lizenz](https://img.shields.io/badge/license-GPL--3.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![Wine](https://img.shields.io/badge/wine-5.0%2B-red) ![Photoshop](https://img.shields.io/badge/Photoshop-CC-blue)
 
-**Adobe Photoshop CC 2019 nativ auf Linux mit Wine ausführen**
+**Adobe Photoshop nativ auf Linux mit Wine ausführen**
 
-Optimiert für CachyOS und alle großen Linux-Distributionen.
+Ein einfacher, automatisierter Installer, der dir hilft, Photoshop auf Linux einzurichten. Funktioniert auf CachyOS, Arch, Ubuntu, Fedora und allen großen Linux-Distributionen.
 
 ---
 
@@ -464,13 +464,44 @@ photoshop
 - https://www.linuxnest.com/how-to-run-photoshop-on-linux-an-ultimate-guide/
 - https://thelinuxcode.com/install_adobe_photoshop_linux/
 
-## 🤝 Support und Community
+## 🤝 Mithelfen
 
-Falls du Probleme hast, die hier nicht aufgeführt sind:
+**Wir brauchen deine Hilfe!** Dieses Projekt wird durch Beiträge aus der Community besser.
 
-1. **Überprüfe GitHub Issues:** Viele Probleme wurden bereits gelöst
-2. **Erstelle ein neues Issue:** Mit detaillierten Logs und Systeminformationen
-3. **Wine Forums:** https://forum.winehq.org/
+### Wie du helfen kannst
+
+#### 🐛 Fehler melden
+Etwas funktioniert nicht? Lass es uns wissen!
+- [Öffne ein GitHub Issue](https://github.com/benjarogit/photoshopCClinux/issues)
+- Bitte angeben: Linux-Distribution, Wine-Version, Fehler-Logs, Schritte zur Reproduktion
+- Auch wenn du dir nicht sicher bist - melde es trotzdem!
+
+#### 💡 Features vorschlagen
+Hast du eine Idee, wie wir das besser machen können?
+- [Öffne einen Feature-Request](https://github.com/benjarogit/photoshopCClinux/issues)
+- Beschreibe was du dir wünschst
+- Erkläre warum es hilfreich wäre
+
+#### 🔧 Fixes & Workarounds teilen
+Eine Lösung für ein Problem gefunden?
+- Teile sie in den [GitHub Issues](https://github.com/benjarogit/photoshopCClinux/issues)
+- Hilf anderen mit dem gleichen Problem
+- Deine Erfahrung hilft allen!
+
+#### 📝 Dokumentation verbessern
+Etwas in der README unklar gefunden?
+- [Öffne ein Issue](https://github.com/benjarogit/photoshopCClinux/issues) oder sende einen Pull Request
+- Hilf dabei, das für Anfänger einfacher zu machen
+- Übersetze in andere Sprachen
+
+#### 💻 Code beitragen
+Möchtest du Code beitragen?
+1. Forke das Repository
+2. Erstelle einen Feature-Branch
+3. Teste deine Änderungen gründlich
+4. Sende einen Pull Request mit klarer Beschreibung
+
+**Jeder Beitrag, groß oder klein, macht dieses Projekt besser! 🙏**
 
 ## 📝 Wichtige Hinweise
 
