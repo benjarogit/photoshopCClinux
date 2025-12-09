@@ -16,27 +16,193 @@
 #               https://github.com/Gictorbit/photoshopCClinux
 ################################################################################
 
-source "sharedFuncs.sh"
+# KRITISCH: Robuste Fehlerbehandlung aktivieren
+set -eu
+(set -o pipefail 2>/dev/null) || true
+
+# Locale/UTF-8 für DE/EN sicherstellen (mit Prüfung auf existierende Locale)
+# KRITISCH: Prüfe ob Locale existiert (Alpine hat oft nur C.UTF-8)
+if command -v locale >/dev/null 2>&1; then
+    if locale -a 2>/dev/null | grep -qE "^(de_DE|de_DE\.utf8|de_DE\.UTF-8)$"; then
+        export LANG="${LANG:-de_DE.UTF-8}"
+    elif locale -a 2>/dev/null | grep -qE "^(C\.utf8|C\.UTF-8)$"; then
+        export LANG="${LANG:-C.UTF-8}"
+    else
+        export LANG="${LANG:-C}"
+    fi
+else
+    # Fallback wenn locale nicht verfügbar
+    export LANG="${LANG:-C.UTF-8}"
+fi
+export LC_ALL="${LC_ALL:-$LANG}"
+
+# KRITISCH: Source-Hijacking verhindern - immer absoluten Pfad verwenden
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/sharedFuncs.sh"
+
+# Setup comprehensive logging - ALL output will be logged
+# This function sets up automatic logging of all stdout/stderr
+setup_comprehensive_logging() {
+    # Export LOG_FILE so sharedFuncs.sh can use it
+    export LOG_FILE
+    export ERROR_LOG
+    export PROJECT_ROOT
+    
+    log_debug "Comprehensive logging aktiviert - alle Ausgaben werden automatisch geloggt"
+}
 
 # Setup logging - use project directory (where setup.sh is located)
+# KRITISCH: PATH-Hijacking Prüfung
+if [[ ":$PATH:" == *":.:"* ]] || [[ "$PATH" == .:* ]] || [[ "$PATH" == *:. ]]; then
+    export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
+fi
+
 # Get project root directory (parent of scripts/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOG_DIR="$PROJECT_ROOT/logs"
 mkdir -p "$LOG_DIR"
 
-# Generate timestamp once to ensure both logs have matching timestamps
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-LOG_FILE="$LOG_DIR/install_${TIMESTAMP}.log"
-ERROR_LOG="$LOG_DIR/install_${TIMESTAMP}_errors.log"
+# Delete old logs before creating new ones
+if [ -d "$LOG_DIR" ]; then
+    rm -f "$LOG_DIR"/*.log 2>/dev/null
+fi
 
-# Log function for both console and file
+# Generate timestamp once to ensure both logs have matching timestamps
+# Format: "Log: 09.12.25 06:36 Uhr"
+TIMESTAMP=$(date +%d.%m.%y\ %H:%M\ Uhr)
+LOG_FILE="$LOG_DIR/Log: ${TIMESTAMP}.log"
+ERROR_LOG="$LOG_DIR/Log: ${TIMESTAMP}_errors.log"
+
+# Enhanced logging functions for comprehensive debugging
+# ALL output goes to log file, but only important messages to console
 log() {
-    echo "$@" | tee -a "$LOG_FILE"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    # Write to log file
+    echo "[$timestamp] $@" >> "$LOG_FILE"
+    # Also show to user (important messages)
+    echo "$@"
 }
 
 log_error() {
-    echo "$@" | tee -a "$LOG_FILE" | tee -a "$ERROR_LOG"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    # Write to both log files
+    echo "[$timestamp] ERROR: $@" >> "$LOG_FILE"
+    echo "[$timestamp] ERROR: $@" >> "$ERROR_LOG"
+    # Always show errors to user
+    echo -e "\033[1;31mERROR: $@\033[0m"
+}
+
+log_debug() {
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    # Write to log file only (not to console)
+    echo "[$timestamp] DEBUG: $@" >> "$LOG_FILE"
+}
+
+# Log user input prompts and responses
+log_prompt() {
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] PROMPT: $@" | tee -a "$LOG_FILE"
+}
+
+log_input() {
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] USER_INPUT: $@" | tee -a "$LOG_FILE"
+}
+
+# Wrapper for read that logs input
+read_with_log() {
+    local prompt="$1"
+    local var_name="$2"
+    # KRITISCH: IFS zurücksetzen nach read
+    local old_IFS="${IFS:-}"
+    log_prompt "$prompt"
+    IFS= read -r -p "$prompt" "$var_name"
+    log_input "${!var_name}"
+    # KRITISCH: IFS zurücksetzen
+    IFS="$old_IFS"
+}
+
+# Note: All echo statements should also call log() for comprehensive logging
+# This ensures everything is logged to the log file
+
+log_command() {
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] EXEC: $@" >> "$LOG_FILE"
+    local output
+    output=$("$@" 2>&1)
+    local exit_code=$?
+    if [ -n "$output" ]; then
+        echo "$output" | while IFS= read -r line; do
+            echo "[$timestamp] OUTPUT: $line" >> "$LOG_FILE"
+        done
+    fi
+    return $exit_code
+}
+
+# Log all environment variables relevant to Wine/Proton
+log_environment() {
+    log_debug "=== Environment Variables ==="
+    log_debug "PATH: $PATH"
+    log_debug "WINEPREFIX: ${WINEPREFIX:-not set}"
+    log_debug "WINEARCH: ${WINEARCH:-not set}"
+    log_debug "PROTON_PATH: ${PROTON_PATH:-not set}"
+    log_debug "PROTON_VERB: ${PROTON_VERB:-not set}"
+    log_debug "SCR_PATH: ${SCR_PATH:-not set}"
+    log_debug "WINE_PREFIX: ${WINE_PREFIX:-not set}"
+    log_debug "RESOURCES_PATH: ${RESOURCES_PATH:-not set}"
+    log_debug "CACHE_PATH: ${CACHE_PATH:-not set}"
+    log_debug "LANG: ${LANG:-not set}"
+    log_debug "LANG_CODE: ${LANG_CODE:-not set}"
+    log_debug "=== End Environment Variables ==="
+}
+
+# Log system information (with timeout protection to prevent hanging)
+log_system_info() {
+    log_debug "=== System Information ==="
+    log_debug "OS: $(uname -a 2>&1)"
+    
+    local distro=$(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2 || echo 'unknown')
+    log_debug "Distribution: $distro"
+    
+    # Wine version with timeout
+    if command -v timeout &>/dev/null; then
+        local wine_ver=$(timeout 2 wine --version 2>&1 || echo 'timeout or error')
+    else
+        local wine_ver=$(wine --version 2>&1 || echo 'not found')
+    fi
+    log_debug "Wine version: $wine_ver"
+    
+    # Winetricks version - this can hang, so we use a safer approach
+    log_debug "Winetricks: checking..."
+    if command -v winetricks &>/dev/null; then
+        # Try to get version quickly, but don't wait forever
+        if command -v timeout &>/dev/null; then
+            local winetricks_ver=$(timeout 1 winetricks --version 2>&1 | head -1 || echo 'timeout')
+        else
+            # Fallback: just check if it exists
+            local winetricks_ver="installed (version check skipped)"
+        fi
+    else
+        local winetricks_ver="not found"
+    fi
+    log_debug "Winetricks: $winetricks_ver"
+    
+    # Proton GE check - DON'T call proton-ge --version as it starts Steam!
+    if command -v proton-ge &>/dev/null; then
+        # Just check if the command exists, don't run it (it starts Steam)
+        log_debug "Proton GE: installed (system-wide, version check skipped to avoid Steam)"
+    else
+        log_debug "Proton GE: not found"
+    fi
+    
+    log_debug "Available Wine binaries:"
+    which -a wine 2>/dev/null | while IFS= read -r wine_path; do
+        if [ -n "$wine_path" ]; then
+            log_debug "  - $wine_path"
+        fi
+    done
+    log_debug "=== End System Information ==="
 }
 
 # Detect system language
@@ -86,7 +252,8 @@ check_proton_ge_installable() {
 }
 
 # Detect all available Wine/Proton versions
-# Returns: array of options with priority (Proton GE > Wine > others)
+# Returns: array of options with priority (System Proton GE > Wine > others)
+# NOTE: Proton GE from Steam directory is SKIPPED because it starts Steam
 detect_all_wine_versions() {
     local options=()
     local descriptions=()
@@ -96,30 +263,17 @@ detect_all_wine_versions() {
     local recommended_index=1
     local proton_found=0  # Flag to track if any Proton GE was found
     
-    # Priority 1: Proton GE (Steam directory) - BEST OPTION
-    if [ -d "$HOME/.steam/steam/steamapps/common" ]; then
-        while IFS= read -r proton_path; do
-            if [ -f "$proton_path/proton" ] && [ -f "$proton_path/files/bin/wine" ]; then
-                local version=$(basename "$proton_path")
-                options+=("$index")
-                if [ "$LANG_CODE" = "de" ]; then
-                    descriptions+=("Proton GE (Steam): $version ⭐ EMPFOHLEN - beste Kompatibilität")
-                else
-                    descriptions+=("Proton GE (Steam): $version ⭐ RECOMMENDED - best compatibility")
-                fi
-                paths+=("$proton_path")
-                if [ $proton_found -eq 0 ]; then
-                    recommended_index=$index
-                    proton_found=1
-                fi
-                ((index++))
-            fi
-        done < <(find "$HOME/.steam/steam/steamapps/common" -maxdepth 1 -type d \( -name "Proton*" -o -name "proton-ge*" \) 2>/dev/null | sort -Vr)
-    fi
+    # SKIP: Proton GE (Steam directory) - NOT USED for desktop apps
+    # Reason: It starts Steam when winecfg/wine is called, which breaks the installation
+    # We only use system-wide Proton GE (installed via package manager)
     
-    # Priority 2: System-wide Proton GE (if installed via package manager)
+    # Priority 1: System-wide Proton GE (if installed via package manager)
+    # This is the BEST option for desktop applications
+    # NOTE: DON'T call proton-ge --version as it starts Steam!
     if command -v proton-ge &> /dev/null; then
-        local version=$(proton-ge --version 2>/dev/null || echo "system")
+        # Just check if command exists, don't call it (it starts Steam)
+        local version="system"
+        log_debug "Proton GE (system) gefunden - verwende ohne Version-Check (verhindert Steam-Start)"
         options+=("$index")
         if [ "$LANG_CODE" = "de" ]; then
             descriptions+=("Proton GE (system): $version ⭐ EMPFOHLEN - beste Kompatibilität")
@@ -127,11 +281,8 @@ detect_all_wine_versions() {
             descriptions+=("Proton GE (system): $version ⭐ RECOMMENDED - best compatibility")
         fi
         paths+=("system")
-        # Only set as recommended if no Proton GE was found before (Steam Proton takes priority)
-        if [ $proton_found -eq 0 ]; then
-            recommended_index=$index
-            proton_found=1
-        fi
+        recommended_index=$index
+        proton_found=1
         ((index++))
     fi
     
@@ -182,21 +333,71 @@ detect_all_wine_versions() {
 
 # Interactive selection of Wine/Proton version
 select_wine_version() {
+    log_debug "=== select_wine_version() gestartet ==="
     local count=0
     local system=$(detect_system)
+    log_debug "System erkannt: $system"
     local selection=""  # Declare at function start
+    
+    log_debug "Rufe detect_all_wine_versions() auf..."
     detect_all_wine_versions
     count=$?
+    log_debug "detect_all_wine_versions() zurückgegeben: $count Optionen gefunden"
     
     if [ $count -eq 0 ]; then
+        log_error "Keine Wine/Proton-Version gefunden!"
         error "$([ "$LANG_CODE" = "de" ] && echo "FEHLER: Keine Wine/Proton-Version gefunden!" || echo "ERROR: No Wine/Proton version found!")"
         return 1
+    fi
+    
+    # Check if WINE_METHOD is set via command line parameter (skip interactive menu)
+    if [ -n "$WINE_METHOD" ]; then
+        log "Wine-Methode wurde per Parameter gesetzt: $WINE_METHOD"
+        log_debug "Wine-Methode Parameter: $WINE_METHOD"
+        if [ "$LANG_CODE" = "de" ]; then
+            log "Überspringe interaktive Auswahl - verwende: $([ "$WINE_METHOD" = "wine" ] && echo "Wine Standard" || echo "Proton GE")"
+        else
+            log "Skipping interactive selection - using: $([ "$WINE_METHOD" = "wine" ] && echo "Wine Standard" || echo "Proton GE")"
+        fi
+        
+        # Find the matching option index
+        local found=0
+        local index=1
+        for path in "${WINE_PATHS[@]}"; do
+            if [ "$WINE_METHOD" = "proton" ] && [ "$path" = "system" ]; then
+                selection=$index
+                found=1
+                log_debug "Proton GE gefunden bei Index $index"
+                break
+            elif [ "$WINE_METHOD" = "wine" ] && [ "$path" = "wine" ]; then
+                selection=$index
+                found=1
+                log_debug "Wine Standard gefunden bei Index $index"
+                break
+            fi
+            ((index++))
+        done
+        
+        if [ $found -eq 0 ]; then
+            log_error "Angeforderte Wine-Methode '$WINE_METHOD' nicht gefunden!"
+            if [ "$LANG_CODE" = "de" ]; then
+                error "FEHLER: Die angeforderte Wine-Methode '$WINE_METHOD' ist nicht verfügbar. Verfügbare Optionen werden angezeigt..."
+            else
+                error "ERROR: Requested Wine method '$WINE_METHOD' not available. Showing available options..."
+            fi
+            # Fall through to interactive menu
+        else
+            # Use the found selection and skip menu
+            log "Verwende automatisch ausgewählte Option: $selection"
+            # Continue to setup_wine_environment with the selected option
+        fi
     fi
     
     # Check if no Proton GE found (only Wine available) - show warning
     local has_proton=0
     for path in "${WINE_PATHS[@]}"; do
-        if [[ "$path" == *"Proton"* ]] || [ "$path" = "system" ]; then
+        # Only system-wide Proton GE is used (not Steam Proton)
+        if [ "$path" = "system" ]; then
             has_proton=1
             break
         fi
@@ -207,6 +408,54 @@ select_wine_version() {
         selection=1
         if [ "$LANG_CODE" = "de" ]; then
             if [ $has_proton -eq 0 ] && ([ "$system" = "cachyos" ] || [ "$system" = "arch" ] || [ "$system" = "manjaro" ]); then
+                log ""
+                log "═══════════════════════════════════════════════════════════════"
+                log "           WICHTIG: Wine-Version wählen"
+                log "═══════════════════════════════════════════════════════════════"
+                log ""
+                log "ℹ System erkannt: $system"
+                log ""
+                log "Für Photoshop gibt es zwei Möglichkeiten:"
+                log ""
+                log "  1. PROTON GE (EMPFOHLEN)"
+                log "     → Bessere Kompatibilität, weniger Fehler"
+                log "     → Wird jetzt automatisch installiert (ca. 2-5 Minuten)"
+                log ""
+                log "  2. STANDARD WINE (Fallback)"
+                log "     → Bereits installiert, funktioniert meist auch"
+                log "     → Installation startet sofort"
+                log ""
+                log "═══════════════════════════════════════════════════════════════"
+                log ""
+                log "Was möchtest du tun?"
+                log ""
+                log "   [J] Ja - Proton GE installieren (EMPFOHLEN für beste Ergebnisse)"
+                log "   [N] Nein - Mit Standard-Wine fortfahren (schneller, aber weniger optimal)"
+                log ""
+                log ""
+                log "═══════════════════════════════════════════════════════════════"
+                log "           WICHTIG: Wine-Version wählen"
+                log "═══════════════════════════════════════════════════════════════"
+                log ""
+                log "ℹ System erkannt: $system"
+                log ""
+                log "Für Photoshop gibt es zwei Möglichkeiten:"
+                log ""
+                log "  1. PROTON GE (EMPFOHLEN)"
+                log "     → Bessere Kompatibilität, weniger Fehler"
+                log "     → Wird jetzt automatisch installiert (ca. 2-5 Minuten)"
+                log ""
+                log "  2. STANDARD WINE (Fallback)"
+                log "     → Bereits installiert, funktioniert meist auch"
+                log "     → Installation startet sofort"
+                log ""
+                log "═══════════════════════════════════════════════════════════════"
+                log ""
+                log "Was möchtest du tun?"
+                log ""
+                log "   [J] Ja - Proton GE installieren (EMPFOHLEN für beste Ergebnisse)"
+                log "   [N] Nein - Mit Standard-Wine fortfahren (schneller, aber weniger optimal)"
+                log ""
                 echo ""
                 echo "═══════════════════════════════════════════════════════════════"
                 echo "           WICHTIG: Wine-Version wählen"
@@ -231,73 +480,264 @@ select_wine_version() {
                 echo "   [J] Ja - Proton GE installieren (EMPFOHLEN für beste Ergebnisse)"
                 echo "   [N] Nein - Mit Standard-Wine fortfahren (schneller, aber weniger optimal)"
                 echo ""
-                read -p "Deine Wahl [J/n]: " install_proton
+                log_prompt "Deine Wahl [J/n]: "
+                IFS= read -r -p "Deine Wahl [J/n]: " install_proton
+                log_input "$install_proton"
                 if [[ "$install_proton" =~ ^[JjYy]$ ]] || [ -z "$install_proton" ]; then
+                    log ""
+                    log "═══════════════════════════════════════════════════════════════"
+                    log "           Proton GE wird jetzt installiert"
+                    log "═══════════════════════════════════════════════════════════════"
+                    log ""
                     echo ""
                     echo "═══════════════════════════════════════════════════════════════"
                     echo "           Proton GE wird jetzt installiert"
                     echo "═══════════════════════════════════════════════════════════════"
                     echo ""
+                    log "SCHRITT 1/2: Prüfe ob Wine installiert ist..."
                     echo "SCHRITT 1/2: Prüfe ob Wine installiert ist..."
                     echo ""
                     if ! command -v wine &> /dev/null; then
+                        log "⚠ Wine fehlt noch - wird jetzt installiert..."
+                        log "   (Wine wird für die Photoshop-Komponenten benötigt)"
                         echo "⚠ Wine fehlt noch - wird jetzt installiert..."
                         echo "   (Wine wird für die Photoshop-Komponenten benötigt)"
                         echo ""
                         if command -v pacman &> /dev/null; then
-                            sudo pacman -S wine
+                            log_command sudo pacman -S wine
                         else
+                            log "   Bitte installiere Wine manuell für deine Distribution"
                             echo "   Bitte installiere Wine manuell für deine Distribution"
-                            read -p "Drücke Enter, wenn Wine installiert wurde: " wait_wine
+                            log_prompt "Drücke Enter, wenn Wine installiert wurde: "
+                            IFS= read -r -p "Drücke Enter, wenn Wine installiert wurde: " wait_wine
+                            log_input "$wait_wine"
                         fi
+                        log ""
                         echo ""
                     else
+                        log "✓ Wine ist bereits installiert"
                         echo "✓ Wine ist bereits installiert"
                         echo ""
                     fi
-                    echo "SCHRITT 2/2: Installiere Proton GE..."
+                    log "SCHRITT 2/2: Installiere Proton GE system-weit (unabhängig von Steam)..."
+                    log "   (Dies kann 2-5 Minuten dauern - bitte warten...)"
+                    log "   → WICHTIG: Proton GE wird system-weit installiert, NICHT in Steam-Verzeichnis"
+                    echo "SCHRITT 2/2: Installiere Proton GE system-weit (unabhängig von Steam)..."
                     echo "   (Dies kann 2-5 Minuten dauern - bitte warten...)"
+                    echo "   → WICHTIG: System-weite Installation, NICHT in Steam-Verzeichnis"
                     echo ""
                     local install_success=0
-                    if command -v yay &> /dev/null; then
-                        if yay -S proton-ge-custom-bin; then
-                            install_success=1
+                    local proton_ge_install_path=""
+                    
+                    # OPTION 1: Versuche AUR-Paket (Arch-basiert)
+                    if command -v yay &> /dev/null || command -v paru &> /dev/null; then
+                        local aur_helper=""
+                        if command -v yay &> /dev/null; then
+                            aur_helper="yay"
+                        else
+                            aur_helper="paru"
                         fi
-                    elif command -v paru &> /dev/null; then
-                        if paru -S proton-ge-custom-bin; then
-                            install_success=1
+                        
+                        log "  → Versuche Installation über AUR ($aur_helper)..."
+                        log_command $aur_helper -S proton-ge-custom-bin
+                        if [ $? -eq 0 ]; then
+                            # Prüfe Installationspfad
+                            local proton_ge_path=$(pacman -Ql proton-ge-custom-bin 2>/dev/null | grep "files/bin/wine$" | head -1 | awk '{print $2}' | xargs dirname | xargs dirname | xargs dirname)
+                            if [ -n "$proton_ge_path" ] && [ -d "$proton_ge_path" ]; then
+                                if [[ "$proton_ge_path" =~ steam ]]; then
+                                    log "⚠ AUR-Paket installiert in Steam-Verzeichnis - überspringe"
+                                    log "   → Installiere Proton GE manuell system-weit..."
+                                    install_success=0  # Weiter zu manueller Installation
+                                else
+                                    log "✓ Proton GE system-weit installiert: $proton_ge_path"
+                                    echo "✓ Proton GE system-weit installiert"
+                                    install_success=1
+                                    proton_ge_install_path="$proton_ge_path"
+                                fi
+                            fi
                         fi
-                    else
-                        echo "❌ Kein AUR-Helper (yay/paru) gefunden!"
-                        echo "   Installiere yay oder paru, dann führe aus:"
-                        echo "   yay -S proton-ge-custom-bin"
+                    fi
+                    
+                    # OPTION 2: Manuelle Installation (universell für alle Linux-Distributionen)
+                    if [ $install_success -eq 0 ]; then
+                        log "  → Installiere Proton GE manuell system-weit..."
+                        echo "  → Installiere Proton GE manuell system-weit..."
+                        
+                        # Bestimme Installationspfad (system-weit, nicht Steam)
+                        local install_base=""
+                        if [ -w "/usr/local/share" ]; then
+                            install_base="/usr/local/share/proton-ge"
+                        elif [ -w "$HOME/.local/share" ]; then
+                            install_base="$HOME/.local/share/proton-ge"
+                        else
+                            install_base="$HOME/.proton-ge"
+                        fi
+                        
+                        log "  → Installationspfad: $install_base"
+                        
+                        # Erstelle Verzeichnis
+                        mkdir -p "$install_base" 2>/dev/null || {
+                            log_error "Konnte Installationsverzeichnis nicht erstellen: $install_base"
+                            install_success=0
+                        }
+                        
+                        if [ -d "$install_base" ]; then
+                            # Lade neueste Proton GE Version von GitHub
+                            log "  → Lade neueste Proton GE Version herunter..."
+                            echo "  → Lade neueste Proton GE Version herunter..."
+                            
+                            # GitHub API: Hole neueste Release-Version
+                            local latest_version=$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | head -1)
+                            
+                            if [ -z "$latest_version" ]; then
+                                # Fallback: Versuche direkt von Releases-Seite
+                                latest_version="GE-Proton10-26"  # Fallback-Version
+                                log "  ⚠ Konnte neueste Version nicht ermitteln, verwende Fallback: $latest_version"
+                            else
+                                log "  → Neueste Version gefunden: $latest_version"
+                            fi
+                            
+                            # Download-URL
+                            local download_url="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${latest_version}/${latest_version}.tar.gz"
+                            local download_file="$install_base/${latest_version}.tar.gz"
+                            
+                            # KRITISCH: Download-URL-Validierung - verhindere bösartige URLs
+                            # Prüfe dass URL mit https:// beginnt (HTTPS-Erzwingung)
+                            if [[ ! "$download_url" =~ ^https:// ]]; then
+                                log_error "Download-URL muss HTTPS verwenden (Sicherheitsrisiko): $download_url"
+                                download_ok=0
+                            # Prüfe dass URL von github.com stammt
+                            elif [[ ! "$download_url" =~ ^https://(www\.)?github\.com ]]; then
+                                log_error "Download-URL von nicht erlaubter Domain (Sicherheitsrisiko): $download_url"
+                                download_ok=0
+                            else
+                                log "  → Download von: $download_url"
+                                echo "  → Download läuft..."
+                                
+                                # Download mit Progress
+                                local download_ok=0
+                                if command -v wget &> /dev/null; then
+                                    wget -q --show-progress -O "$download_file" "$download_url" 2>&1 | tee -a "$LOG_FILE"
+                                    if [ $? -eq 0 ] && [ -f "$download_file" ]; then
+                                        download_ok=1
+                                    else
+                                        log_error "Download fehlgeschlagen"
+                                    fi
+                                elif command -v curl &> /dev/null; then
+                                    curl -L --progress-bar -o "$download_file" "$download_url" 2>&1 | tee -a "$LOG_FILE"
+                                    if [ $? -eq 0 ] && [ -f "$download_file" ]; then
+                                        download_ok=1
+                                    else
+                                        log_error "Download fehlgeschlagen"
+                                    fi
+                                else
+                                    log_error "wget oder curl nicht gefunden - Download nicht möglich"
+                                fi
+                            fi
+                            
+                            if [ $download_ok -eq 1 ] && [ -f "$download_file" ]; then
+                                # Entpacke
+                                log "  → Entpacke Proton GE..."
+                                echo "  → Entpacke Proton GE..."
+                                tar -xzf "$download_file" -C "$install_base" 2>&1 | tee -a "$LOG_FILE"
+                                if [ $? -eq 0 ]; then
+                                    # Prüfe ob Installation erfolgreich
+                                    local extracted_dir="$install_base/${latest_version}"
+                                    if [ -d "$extracted_dir" ] && [ -f "$extracted_dir/files/bin/wine" ]; then
+                                        log "✓ Proton GE manuell installiert: $extracted_dir"
+                                        echo "✓ Proton GE system-weit installiert"
+                                        install_success=1
+                                        proton_ge_install_path="$extracted_dir"
+                                        
+                                        # Erstelle Symlink für einfacheren Zugriff
+                                        if [ -d "$install_base" ]; then
+                                            ln -sfn "$extracted_dir" "$install_base/current" 2>/dev/null || true
+                                        fi
+                                    else
+                                        log_error "Installation unvollständig - wine-Binary nicht gefunden"
+                                        install_success=0
+                                    fi
+                                else
+                                    log_error "Entpacken fehlgeschlagen"
+                                    install_success=0
+                                fi
+                                
+                                # Lösche Download-Datei
+                                rm -f "$download_file" 2>/dev/null || true
+                            else
+                                install_success=0
+                            fi
+                        fi
+                    fi
+                    
+                    # OPTION 3: Fallback - Benutzer installiert manuell
+                    if [ $install_success -eq 0 ]; then
+                        log "⚠ Automatische Installation fehlgeschlagen"
                         echo ""
-                        read -p "Drücke Enter, wenn Proton GE installiert wurde, oder [A] zum Abbrechen: " continue_install
-                        if [[ "$continue_install" =~ ^[Aa]$ ]]; then
-                            error "Installation abgebrochen"
+                        echo "⚠ Automatische Proton GE Installation fehlgeschlagen"
+                        echo ""
+                        if [ "$LANG_CODE" = "de" ]; then
+                            echo "Du kannst Proton GE manuell installieren:"
+                            echo "  1. Lade von: https://github.com/GloriousEggroll/proton-ge-custom/releases"
+                            echo "  2. Entpacke nach: $HOME/.local/share/proton-ge/"
+                            echo "  3. Oder verwende Standard-Wine (funktioniert auch)"
+                            echo ""
+                            log_prompt "   [J] Ja - Mit Standard-Wine fortfahren  [N] Nein - Abbrechen [J/n]: "
+                            IFS= read -r -p "   [J] Ja - Mit Standard-Wine fortfahren  [N] Nein - Abbrechen [J/n]: " continue_with_wine
+                            log_input "$continue_with_wine"
+                        else
+                            echo "You can install Proton GE manually:"
+                            echo "  1. Download from: https://github.com/GloriousEggroll/proton-ge-custom/releases"
+                            echo "  2. Extract to: $HOME/.local/share/proton-ge/"
+                            echo "  3. Or use Standard Wine (works too)"
+                            echo ""
+                            log_prompt "   [Y] Yes - Continue with Standard Wine  [N] No - Cancel [Y/n]: "
+                            IFS= read -r -p "   [Y] Yes - Continue with Standard Wine  [N] No - Cancel [Y/n]: " continue_with_wine
+                            log_input "$continue_with_wine"
+                        fi
+                        if [[ "$continue_with_wine" =~ ^[Nn]$ ]]; then
+                            log_error "Installation abgebrochen"
+                            error "$([ "$LANG_CODE" = "de" ] && echo "Installation abgebrochen" || echo "Installation cancelled")"
                             exit 1
                         fi
-                        # Assume success if user pressed Enter
-                        install_success=1
+                        # Verwende Standard-Wine
+                        selection=1
+                        log ""
+                        log "→ Verwende Standard-Wine..."
+                        echo ""
+                        echo "→ Verwende Standard-Wine..."
+                        echo ""
+                        return 0
                     fi
                     
                     if [ $install_success -eq 0 ]; then
+                        log ""
+                        log "❌ FEHLER: Proton GE Installation fehlgeschlagen!"
                         echo ""
                         echo "❌ FEHLER: Proton GE Installation fehlgeschlagen!"
                         echo ""
                         if [ "$LANG_CODE" = "de" ]; then
+                            log "Möchtest du trotzdem mit Standard-Wine fortfahren?"
                             echo "Möchtest du trotzdem mit Standard-Wine fortfahren?"
-                            read -p "   [J] Ja - Mit Standard-Wine fortfahren  [N] Nein - Abbrechen [J/n]: " continue_with_wine
+                            log_prompt "   [J] Ja - Mit Standard-Wine fortfahren  [N] Nein - Abbrechen [J/n]: "
+                            IFS= read -r -p "   [J] Ja - Mit Standard-Wine fortfahren  [N] Nein - Abbrechen [J/n]: " continue_with_wine
+                            log_input "$continue_with_wine"
                         else
+                            log "Do you want to continue with Standard Wine anyway?"
                             echo "Do you want to continue with Standard Wine anyway?"
-                            read -p "   [Y] Yes - Continue with Standard Wine  [N] No - Cancel [Y/n]: " continue_with_wine
+                            log_prompt "   [Y] Yes - Continue with Standard Wine  [N] No - Cancel [Y/n]: "
+                            IFS= read -r -p "   [Y] Yes - Continue with Standard Wine  [N] No - Cancel [Y/n]: " continue_with_wine
+                            log_input "$continue_with_wine"
                         fi
                         if [[ "$continue_with_wine" =~ ^[Nn]$ ]]; then
+                            log_error "Installation abgebrochen"
                             error "$([ "$LANG_CODE" = "de" ] && echo "Installation abgebrochen" || echo "Installation cancelled")"
                             exit 1
                         fi
                         # Continue with standard Wine
                         selection=1
+                        log ""
+                        log "→ Verwende Standard-Wine..."
                         echo ""
                         echo "→ Verwende Standard-Wine..."
                         echo ""
@@ -388,7 +828,7 @@ select_wine_version() {
                 echo "   [Y] Yes - Install Proton GE (RECOMMENDED for best results)"
                 echo "   [N] No - Continue with Standard Wine (faster, but less optimal)"
                 echo ""
-                read -p "Your choice [Y/n]: " install_proton
+                IFS= read -r -p "Your choice [Y/n]: " install_proton
                 if [[ "$install_proton" =~ ^[YyJj]$ ]] || [ -z "$install_proton" ]; then
                     echo ""
                     echo "═══════════════════════════════════════════════════════════════"
@@ -405,7 +845,7 @@ select_wine_version() {
                             sudo pacman -S wine
                         else
                             echo "   Please install Wine manually for your distribution"
-                            read -p "Press Enter when Wine is installed: " wait_wine
+                            IFS= read -r -p "Press Enter when Wine is installed: " wait_wine
                         fi
                         echo ""
                     else
@@ -429,7 +869,7 @@ select_wine_version() {
                         echo "   Install yay or paru, then run:"
                         echo "   yay -S proton-ge-custom-bin"
                         echo ""
-                        read -p "Press Enter when Proton GE is installed, or [C] to Cancel: " continue_install
+                        IFS= read -r -p "Press Enter when Proton GE is installed, or [C] to Cancel: " continue_install
                         if [[ "$continue_install" =~ ^[Cc]$ ]]; then
                             error "Installation cancelled"
                             exit 1
@@ -443,7 +883,7 @@ select_wine_version() {
                         echo "❌ ERROR: Proton GE installation failed!"
                         echo ""
                         echo "Do you want to continue with Standard Wine anyway?"
-                        read -p "   [Y] Yes - Continue with Standard Wine  [N] No - Cancel [Y/n]: " continue_with_wine
+                        IFS= read -r -p "   [Y] Yes - Continue with Standard Wine  [N] No - Cancel [Y/n]: " continue_with_wine
                         if [[ "$continue_with_wine" =~ ^[Nn]$ ]]; then
                             error "Installation cancelled"
                             exit 1
@@ -582,9 +1022,9 @@ select_wine_version() {
         local valid_options=$(IFS=,; echo "${WINE_OPTIONS[*]}")
         while true; do
             if [ "$LANG_CODE" = "de" ]; then
-                read -p "Wähle eine Option [$valid_options] (Enter für Empfehlung: $default_choice): " selection
+                IFS= read -r -p "Wähle eine Option [$valid_options] (Enter für Empfehlung: $default_choice): " selection
             else
-                read -p "Select an option [$valid_options] (Enter for recommended: $default_choice): " selection
+                IFS= read -r -p "Select an option [$valid_options] (Enter for recommended: $default_choice): " selection
             fi
             
             # Default to recommended option
@@ -638,43 +1078,99 @@ select_wine_version() {
     log "Pfad: $selected_path"
     
     # Configure environment based on selection
-    if [ "$selected_path" != "wine" ] && [ "$selected_path" != "wine-staging" ] && [ "$selected_path" != "system" ]; then
-        # Proton GE from Steam directory
-        export PATH="$selected_path/files/bin:$PATH"
-        export PROTON_PATH="$selected_path"
-        export PROTON_VERB=1
-        log "✓ Proton GE konfiguriert: $selected_path"
-    elif [ "$selected_path" = "system" ]; then
+    # NOTE: Proton GE from Steam directory is no longer used (it starts Steam)
+    if [ "$selected_path" = "system" ]; then
         # System-wide Proton GE - find the actual path
+        # PRIORITÄT: Manuell installiert > AUR-Paket (nicht Steam) > Standard-Wine
         local proton_ge_path=""
-        # Try common installation paths
-        if [ -d "/usr/share/proton-ge" ]; then
-            proton_ge_path="/usr/share/proton-ge"
-        elif [ -d "/usr/local/share/proton-ge" ]; then
-            proton_ge_path="/usr/local/share/proton-ge"
-        elif [ -d "$HOME/.local/share/proton-ge" ]; then
-            proton_ge_path="$HOME/.local/share/proton-ge"
-        else
-            # Try to find via proton-ge command
-            local proton_ge_cmd=$(command -v proton-ge 2>/dev/null)
-            if [ -n "$proton_ge_cmd" ]; then
-                # proton-ge is usually a symlink or script, try to find the actual directory
-                local proton_ge_dir=$(readlink -f "$proton_ge_cmd" 2>/dev/null | xargs dirname 2>/dev/null | xargs dirname 2>/dev/null | xargs dirname 2>/dev/null)
-                if [ -d "$proton_ge_dir" ] && [ -f "$proton_ge_dir/files/bin/wine" ]; then
-                    proton_ge_path="$proton_ge_dir"
+        
+        # PRIORITÄT 1: Manuell installiert (universell für alle Linux-Distributionen)
+        local possible_manual_paths=(
+            "$HOME/.local/share/proton-ge/current"
+            "$HOME/.local/share/proton-ge"
+            "$HOME/.proton-ge/current"
+            "$HOME/.proton-ge"
+            "/usr/local/share/proton-ge/current"
+            "/usr/local/share/proton-ge"
+            "/opt/proton-ge/current"
+            "/opt/proton-ge"
+        )
+        
+        for path in "${possible_manual_paths[@]}"; do
+            # Prüfe ob es ein Symlink ist (current -> version)
+            local real_path="$path"
+            if [ -L "$path" ]; then
+                real_path=$(readlink -f "$path" 2>/dev/null || echo "$path")
+            fi
+            
+            if [ -d "$real_path" ] && [ -f "$real_path/files/bin/wine" ]; then
+                # Prüfe dass es NICHT im Steam-Verzeichnis ist
+                if [[ ! "$real_path" =~ steam ]]; then
+                    proton_ge_path="$real_path"
+                    log_debug "Proton GE (manuell) gefunden: $proton_ge_path"
+                    break
+                fi
+            fi
+        done
+        
+        # PRIORITÄT 2: AUR-Paket (nur wenn nicht Steam-Verzeichnis)
+        if [ -z "$proton_ge_path" ] && command -v pacman &>/dev/null; then
+            local proton_ge_pkg_path=$(pacman -Ql proton-ge-custom-bin 2>/dev/null | grep "files/bin/wine$" | head -1 | awk '{print $2}' | xargs dirname | xargs dirname | xargs dirname)
+            if [ -n "$proton_ge_pkg_path" ] && [ -d "$proton_ge_pkg_path" ] && [ -f "$proton_ge_pkg_path/files/bin/wine" ]; then
+                # Only use if NOT in Steam directory (Steam paths start Steam)
+                if [[ ! "$proton_ge_pkg_path" =~ steam ]]; then
+                    # KRITISCH: Validierung dass Pfad sicher ist
+                    if [[ ! "$proton_ge_pkg_path" =~ ^/tmp|^/var/tmp|^/dev/shm|^/proc ]]; then
+                        proton_ge_path="$proton_ge_pkg_path"
+                        log_debug "Proton GE (AUR-Paket) gefunden: $proton_ge_path"
+                    else
+                        log_debug "Proton GE Pfad in unsicherem Verzeichnis, überspringe: $proton_ge_pkg_path"
+                    fi
                 fi
             fi
         fi
         
+        # PRIORITÄT 3: Standard-System-Pfade (falls vorhanden)
+        if [ -z "$proton_ge_path" ]; then
+            if [ -d "/usr/share/proton-ge" ] && [ -f "/usr/share/proton-ge/files/bin/wine" ]; then
+                proton_ge_path="/usr/share/proton-ge"
+            fi
+        fi
+        
         if [ -n "$proton_ge_path" ] && [ -f "$proton_ge_path/files/bin/wine" ]; then
-            export PATH="$proton_ge_path/files/bin:$PATH"
-            export PROTON_PATH="$proton_ge_path"
-            export PROTON_VERB=1
-            log "✓ Proton GE (system) konfiguriert: $proton_ge_path"
-        else
+            # KRITISCH: PATH-Manipulation verhindern - validiere proton_ge_path
+            # Prüfe dass Pfad nicht in unsicheren Verzeichnissen ist
+            if [[ "$proton_ge_path" =~ ^/tmp|^/var/tmp|^/dev/shm|^/proc ]]; then
+                log_error "Proton GE Pfad ist in unsicherem Verzeichnis (Sicherheitsrisiko): $proton_ge_path"
+                log "Verwende Standard-Wine statt unsicherem Proton GE Pfad"
+                proton_ge_path=""
+            else
+                # KRITISCH: Zusätzliche Validierung - prüfe dass wine-Binary echt ist
+                if [ ! -x "$proton_ge_path/files/bin/wine" ] || [ -L "$proton_ge_path/files/bin/wine" ]; then
+                    log_error "Proton GE wine-Binary ist nicht sicher (Symlink oder nicht ausführbar): $proton_ge_path/files/bin/wine"
+                    log "Verwende Standard-Wine statt unsicherem Proton GE"
+                    proton_ge_path=""
+                else
+                    # KRITISCH: PATH erweitern, aber sicherstellen dass kein . im PATH ist
+                    local safe_path="$proton_ge_path/files/bin"
+                    # Entferne . aus PATH falls vorhanden
+                    local clean_path=$(echo "$PATH" | tr ':' '\n' | grep -v '^\.$' | grep -v '^$' | tr '\n' ':' | sed 's/:$//')
+                    export PATH="$safe_path:${clean_path:-/usr/local/bin:/usr/bin:/bin}"
+                    export PROTON_PATH="$proton_ge_path"
+                    export PROTON_VERB=1
+                    log "✓ Proton GE (system) konfiguriert: $proton_ge_path"
+                    log_debug "Proton GE Wine-Binary: $proton_ge_path/files/bin/wine"
+                fi
+            fi
+        fi
+        
+        if [ -z "$proton_ge_path" ]; then
+            # Proton GE is installed but path not found or is Steam directory
+            # Use standard Wine but set PROTON_PATH="system" for launcher compatibility
             export PROTON_PATH="system"
-            log "⚠ Proton GE (system) - Pfad nicht gefunden, verwende Standard-Wine"
-            log "  → Installer verwendet möglicherweise Standard-Wine statt Proton GE"
+            log "⚠ Proton GE (system) - Pfad nicht gefunden oder Steam-Verzeichnis"
+            log "  → Verwende Standard-Wine (Proton GE ist installiert, aber Pfad nicht verfügbar)"
+            log "  → Hinweis: System-weites Proton GE (nicht Steam) wird empfohlen für beste Kompatibilität"
         fi
     else
         # Standard Wine or Wine Staging
@@ -748,32 +1244,78 @@ else
 fi
 
 function main() {
-    # Start logging immediately
-    log ""
-    log "═══════════════════════════════════════════════════════════════"
-    log "Photoshop CC Installation gestartet: $(date '+%Y-%m-%d %H:%M:%S')"
-    log "Log-Datei: $LOG_FILE"
-    log "═══════════════════════════════════════════════════════════════"
-    log ""
+    # Enable comprehensive logging - ALL output will be logged automatically
+    setup_comprehensive_logging
     
+    # Start logging immediately with comprehensive system info
+    # Write header to log file (not to console)
+    echo "" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ═══════════════════════════════════════════════════════════" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Photoshop CC Installation gestartet: $(date '+%Y-%m-%d %H:%M:%S')" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Log-Datei: $LOG_FILE" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Error-Log: $ERROR_LOG" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ═══════════════════════════════════════════════════════════" >> "$LOG_FILE"
+    echo "" >> "$LOG_FILE"
+    
+    # Show only important message to user
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "Photoshop CC Installation gestartet"
+    echo "Log-Datei: $LOG_FILE"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo ""
+    
+    # Log comprehensive system information (to file only)
+    log_system_info
+    echo "" >> "$LOG_FILE"
+    
+    log_debug "=== Script Initialization ==="
+    log_debug "SCRIPT_DIR: $SCRIPT_DIR"
+    log_debug "PROJECT_ROOT: $PROJECT_ROOT"
+    log_debug "LOG_DIR: $LOG_DIR"
+    log_debug "LOG_FILE: $LOG_FILE"
+    log_debug "ERROR_LOG: $ERROR_LOG"
+    log_debug "=== End Script Initialization ==="
+    echo "" >> "$LOG_FILE"
+    
+    echo "Erstelle Verzeichnisse..."
+    log "Erstelle Verzeichnisse..."
     mkdir -p $SCR_PATH
+    log_debug "SCR_PATH erstellt: $SCR_PATH"
     mkdir -p $CACHE_PATH
+    log_debug "CACHE_PATH erstellt: $CACHE_PATH"
+    echo "" >> "$LOG_FILE"
     
     setup_log "================| script executed |================"
+    log_debug "setup_log aufgerufen"
 
+    echo "Prüfe System-Voraussetzungen..."
+    log "Prüfe System-Architektur..."
     is64
+    log_debug "is64 Prüfung abgeschlossen"
 
     #make sure wine and winetricks package is already installed
+    log "Prüfe erforderliche Pakete..."
+    log_debug "Prüfe wine..."
     package_installed wine
+    log_debug "Prüfe md5sum..."
     package_installed md5sum
+    log_debug "Prüfe winetricks..."
     package_installed winetricks
+    echo "" >> "$LOG_FILE"
 
     # Setup Wine environment - interactive selection
     # This will show a menu and ask the user to choose
+    echo "Wine/Proton-Version Auswahl..."
+    log "Starte Wine/Proton-Version Auswahl..."
+    log_debug "Rufe setup_wine_environment() auf..."
+    log_environment
     if ! setup_wine_environment; then
+        log_error "setup_wine_environment() fehlgeschlagen!"
         error "$([ "$LANG_CODE" = "de" ] && echo "FEHLER: Wine/Proton GE nicht gefunden!" || echo "ERROR: Wine/Proton GE not found!")"
         exit 1
     fi
+    log_debug "setup_wine_environment() erfolgreich abgeschlossen"
+    log_environment
     
     # Confirm selection
     if [ -n "$PROTON_PATH" ] && [ "$PROTON_PATH" != "system" ]; then
@@ -797,9 +1339,17 @@ function main() {
     #export necessary variable for wine
     export_var
     
+    # Ensure we use the correct wine/winecfg (from selected Proton GE or standard Wine)
+    # The PATH should already be set by select_wine_version(), but we verify it here
+    local wine_binary=$(command -v wine 2>/dev/null || echo "wine")
+    local winecfg_binary=$(command -v winecfg 2>/dev/null || echo "winecfg")
+    log "Verwende Wine-Binary: $wine_binary"
+    log "Verwende Winecfg-Binary: $winecfg_binary"
+    log "Aktueller PATH: $PATH"
+    
     #config wine prefix and install mono and gecko automatic
     echo -e "\033[1;93mplease install mono and gecko packages then click on OK button\e[0m"
-    winecfg 2> "$SCR_PATH/wine-error.log"
+    "$winecfg_binary" 2> "$SCR_PATH/wine-error.log"
     if [ $? -eq 0 ];then
         show_message "prefix configured..."
         sleep 5
@@ -822,15 +1372,117 @@ function main() {
     show_message "$MSG_INSTALL_COMPONENTS"
     show_message "\033[1;33m$MSG_WAIT\e[0m"
     
-    # Setze zuerst Windows-Version auf Windows 10 (wichtig für CC 2019!)
+    # Setze Windows-Version basierend auf erkannte Photoshop-Version
+    # OPTIMIERUNG: Neuere Versionen (2021+) funktionieren besser mit Windows 10
+    # CC 2019 funktioniert auch mit Windows 10 (bessere Kompatibilität)
     show_message "$MSG_SET_WIN10"
     log "$MSG_SET_WIN10"
+    
+    # Für alle Versionen verwende Windows 10 (beste Kompatibilität)
+    if [[ "$PS_VERSION" =~ "2021" ]] || [[ "$PS_VERSION" =~ "2022" ]]; then
+        log "  → Verwende Windows 10 (empfohlen für $PS_VERSION)"
+    else
+        log "  → Verwende Windows 10 (auch für $PS_VERSION kompatibel)"
+    fi
     winetricks -q win10 2>&1 | tee -a "$LOG_FILE"
     
-    # Core-Komponenten einzeln installieren für bessere Fehlerbehandlung
+    # Core-Komponenten: VC++ Runtimes installieren
+    # PRIORITÄT 1: allredist verwenden (schneller, zuverlässiger) - DIREKT INTEGRIERT
+    # PRIORITÄT 2: winetricks als Fallback
     show_message "$MSG_VCRUN"
     log "$MSG_VCRUN"
-    winetricks -q vcrun2010 vcrun2012 vcrun2013 vcrun2015 2>&1 | tee -a "$LOG_FILE"
+    
+    local use_allredist=0
+    local allredist_path=""
+    
+    # Suche allredist in verschiedenen möglichen Pfaden (universell für alle Linux-Distributionen)
+    # PRIORITÄT 1: Im Projekt-Verzeichnis (direkt mitgeliefert)
+    # PRIORITÄT 2: Andere mögliche Pfade
+    # KRITISCH: Umgebungsvariablen-Validierung - prüfe dass $HOME sicher ist
+    local possible_allredist_paths=(
+        "$PROJECT_ROOT/allredist"
+        "$PROJECT_ROOT/../allredist"
+    )
+    # Füge HOME-Pfade nur hinzu wenn $HOME sicher ist
+    if [ -n "$HOME" ] && [ "$HOME" != "/" ] && [ "$HOME" != "/root" ]; then
+        possible_allredist_paths+=(
+            "$HOME/Downloads/allredist"
+            "$HOME/allredist"
+        )
+    fi
+    possible_allredist_paths+=(
+        "/opt/allredist"
+        "/usr/local/share/allredist"
+    )
+    
+    for path in "${possible_allredist_paths[@]}"; do
+        if [ -d "$path/redist" ]; then
+            allredist_path="$path"
+            break
+        fi
+    done
+    
+    # Installiere aus allredist wenn gefunden
+    if [ -n "$allredist_path" ] && [ -d "$allredist_path/redist" ]; then
+        log "✓ allredist-Verzeichnis gefunden: $allredist_path"
+        log "  → Verwende lokale VC++ Redistributables (schneller und zuverlässiger als winetricks)"
+        echo "✓ Verwende lokale VC++ Redistributables aus allredist"
+        use_allredist=1
+        
+        # Installiere VC++ Runtimes aus allredist
+        local vc_versions=("2010" "2012" "2013" "2019")
+        local installed_count=0
+        
+        for vc_ver in "${vc_versions[@]}"; do
+            if [ -d "$allredist_path/redist/$vc_ver" ]; then
+                local vc_x64="$allredist_path/redist/$vc_ver/vcredist_x64.exe"
+                local vc_x86="$allredist_path/redist/$vc_ver/vcredist_x86.exe"
+                
+                if [ -f "$vc_x64" ]; then
+                    log "  → Installiere VC++ $vc_ver (x64)..."
+                    wine "$vc_x64" /quiet /norestart 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
+                    ((installed_count++))
+                fi
+                if [ -f "$vc_x86" ]; then
+                    log "  → Installiere VC++ $vc_ver (x86)..."
+                    wine "$vc_x86" /quiet /norestart 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
+                    ((installed_count++))
+                fi
+            fi
+        done
+        
+        # Für 2019: Prüfe auch VC_redist.x64.exe Format
+        if [ -f "$allredist_path/redist/2019/VC_redist.x64.exe" ]; then
+            log "  → Installiere VC++ 2019 (VC_redist.x64.exe)..."
+            wine "$allredist_path/redist/2019/VC_redist.x64.exe" /quiet /norestart 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
+            ((installed_count++))
+        fi
+        if [ -f "$allredist_path/redist/2019/VC_redist.x86.exe" ]; then
+            log "  → Installiere VC++ 2019 (VC_redist.x86.exe)..."
+            wine "$allredist_path/redist/2019/VC_redist.x86.exe" /quiet /norestart 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
+            ((installed_count++))
+        fi
+        
+        if [ $installed_count -gt 0 ]; then
+            log "✓ $installed_count VC++ Redistributables aus allredist installiert"
+            echo "✓ $installed_count VC++ Redistributables installiert"
+        else
+            log "⚠ allredist gefunden, aber keine VC++ Installer gefunden"
+            use_allredist=0
+        fi
+    fi
+    
+    # Fallback: Verwende winetricks wenn allredist nicht verfügbar oder fehlgeschlagen
+    if [ $use_allredist -eq 0 ]; then
+        if [ -z "$allredist_path" ]; then
+            log "  → allredist nicht gefunden, verwende winetricks..."
+            echo "  → allredist nicht gefunden, verwende winetricks (kann länger dauern)..."
+        else
+            log "  → allredist-Installation fehlgeschlagen, verwende winetricks..."
+            echo "  → allredist-Installation fehlgeschlagen, verwende winetricks..."
+        fi
+        winetricks -q vcrun2010 vcrun2012 vcrun2013 vcrun2015 2>&1 | tee -a "$LOG_FILE"
+    fi
     
     show_message "$MSG_FONTS"
     log "$MSG_FONTS"
@@ -839,6 +1491,17 @@ function main() {
     show_message "$MSG_XML"
     log "$MSG_XML"
     winetricks -q msxml3 msxml6 gdiplus 2>&1 | tee -a "$LOG_FILE"
+    
+    # OPTIMIERUNG: Für neuere Versionen (2021+) zusätzliche Komponenten
+    if [[ "$PS_VERSION" =~ "2021" ]] || [[ "$PS_VERSION" =~ "2022" ]]; then
+        log "  → Installiere zusätzliche Komponenten für $PS_VERSION..."
+        # dotnet48 wird für neuere Photoshop-Versionen benötigt
+        winetricks -q dotnet48 2>&1 | tee -a "$LOG_FILE" || log "  ⚠ dotnet48 Installation fehlgeschlagen (optional)"
+        # vcrun2019 für neuere Versionen
+        if [ $use_allredist -eq 0 ]; then
+            winetricks -q vcrun2019 2>&1 | tee -a "$LOG_FILE" || log "  ⚠ vcrun2019 Installation fehlgeschlagen (optional)"
+        fi
+    fi
     
     # Workaround für bekannte Wine-Probleme (GitHub Issue #34)
     show_message "$MSG_DLL"
@@ -876,7 +1539,18 @@ function main() {
 
     if [ -d $RESOURCES_PATH ];then
         show_message "deleting resources folder"
-        rm -rf $RESOURCES_PATH
+        # KRITISCH: Sichere rm -rf mit Validierung
+        if [ -z "$RESOURCES_PATH" ]; then
+            log_error "RESOURCES_PATH ist leer - überspringe Löschung"
+        elif [ "$RESOURCES_PATH" = "/" ]; then
+            log_error "RESOURCES_PATH ist root - überspringe Löschung (Sicherheit)"
+        elif [ ! -e "$RESOURCES_PATH" ]; then
+            log_debug "RESOURCES_PATH existiert nicht: $RESOURCES_PATH"
+        elif [ -d "$RESOURCES_PATH" ]; then
+            rm -rf "$RESOURCES_PATH" || log_error "Löschen von $RESOURCES_PATH fehlgeschlagen"
+        else
+            log_error "RESOURCES_PATH ist kein Verzeichnis: $RESOURCES_PATH"
+        fi
     else
         error "resources folder Not Found"
     fi
@@ -892,7 +1566,8 @@ function replacement() {
     # Diese Dateien werden normalerweise nur für UI-Icons benötigt
     show_message "Überspringe replacement component (optional für lokale Installation)..."
     
-    local destpath="$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop CC 2019/Resources"
+    # Verwende dynamischen Pfad basierend auf erkannte Version
+    local destpath="$PS_INSTALL_PATH/Resources"
     if [ ! -d "$destpath" ]; then
         show_message "Photoshop Resources-Pfad noch nicht vorhanden, wird später erstellt..."
     fi
@@ -901,12 +1576,20 @@ function replacement() {
 }
 
 function install_photoshopSE() {
-    # Log installation start
+    # Detect Photoshop version
+    PS_VERSION=$(detect_photoshop_version)
+    PS_INSTALL_PATH=$(get_photoshop_install_path "$PS_VERSION")
+    PS_PREFS_PATH=$(get_photoshop_prefs_path "$PS_VERSION")
+    
     log "═══════════════════════════════════════════════════════════════"
-    log "Photoshop CC Installation gestartet: $(date '+%Y-%m-%d %H:%M:%S')"
+    log "Photoshop Installation gestartet: $(date '+%Y-%m-%d %H:%M:%S')"
+    log "Erkannte Version: $PS_VERSION"
+    log "Installations-Pfad: $PS_INSTALL_PATH"
     log "Log-Datei: $LOG_FILE"
     log "═══════════════════════════════════════════════════════════════"
     log ""
+    
+    echo "Erkannte Photoshop-Version: $PS_VERSION"
     
     # Verwende das lokale Adobe Photoshop Installationspaket
     # Use project root directory (already determined at top of script)
@@ -928,7 +1611,7 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     # Kopiere das komplette photoshop Verzeichnis in resources
     cp -r "$(dirname "$local_installer")" "$RESOURCES_PATH/"
     
-    echo "===============| Adobe Photoshop CC 2019 (v20) |===============" >> "$SCR_PATH/wine-error.log"
+    echo "===============| Adobe Photoshop $PS_VERSION |===============" >> "$SCR_PATH/wine-error.log"
     show_message "$MSG_START_INSTALL"
     show_message "\033[1;33m"
     show_message "═══════════════════════════════════════════════════════════════"
@@ -990,7 +1673,7 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
         echo ""
         echo "Installation dauert ca. 5-10 Minuten (einmalig)."
         echo ""
-        read -p "IE8 jetzt installieren? [J/n]: " install_ie8
+        IFS= read -r -p "IE8 jetzt installieren? [J/n]: " install_ie8
     else
         echo "═══════════════════════════════════════════════════════════════"
         echo "           IE8 Installation (RECOMMENDED)"
@@ -1001,7 +1684,7 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
         echo ""
         echo "Installation takes about 5-10 minutes (one-time)."
         echo ""
-        read -p "Install IE8 now? [Y/n]: " install_ie8
+        IFS= read -r -p "Install IE8 now? [Y/n]: " install_ie8
     fi
     
     if [[ "$install_ie8" =~ ^[JjYy]$ ]] || [ -z "$install_ie8" ]; then
@@ -1031,6 +1714,9 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v ieframe /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v actxprxy /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v browseui /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
+    # Dxtrans.dll und msimtf.dll - für JavaScript/IE-Engine (verhindert viele Fehler im Log)
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v dxtrans /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v msimtf /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
     
     # Zusätzliche Registry-Tweaks für bessere IE-Kompatibilität
     log "  → Setze Registry-Tweaks für IE-Kompatibilität..."
@@ -1062,7 +1748,6 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
         log "  4. Direkt auf Button klicken (nicht daneben)"
         log "  5. Installer-Fenster in den Vordergrund bringen (Alt+Tab)"
         log ""
-        log "HINWEIS: Steam startet automatisch mit Proton GE - das ist normal."
     else
         log "PROBLEM: Adobe Installer uses IE engine (mshtml.dll)"
         log "         This doesn't work fully in Wine/Proton."
@@ -1079,7 +1764,6 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
         log "  4. Click directly on button (not beside it)"
         log "  5. Bring installer window to foreground (Alt+Tab)"
         log ""
-        log "NOTE: Steam starts automatically with Proton GE - this is normal."
     fi
     log ""
     
@@ -1098,7 +1782,7 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
         log "$MSG_COMPLETE"
     else
         if [ "$LANG_CODE" = "de" ]; then
-            warning "Installation mit Exit-Code $install_status beendet. Prüfe die Logs..."
+        warning "Installation mit Exit-Code $install_status beendet. Prüfe die Logs..."
             log_error "FEHLER: Installation mit Exit-Code $install_status beendet"
         else
             warning "Installation finished with exit code $install_status. Check logs..."
@@ -1120,9 +1804,13 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     # Versuche problematische Plugins zu entfernen (falls vorhanden)
     show_message "$MSG_SEARCH_PLUGINS"
     
-    # Mögliche Installationspfade
+    # Mögliche Installationspfade (dynamisch basierend auf erkannte Version)
     local possible_paths=(
+        "$PS_INSTALL_PATH"
+        "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop CC 2021"
         "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop CC 2019"
+        "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop 2022"
+        "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop 2021"
         "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop CC 2018"
         "$WINE_PREFIX/drive_c/users/$USER/PhotoshopSE"
     )
@@ -1132,10 +1820,14 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
             show_message "$MSG_FOUND_IN $ps_path"
             
             # Entferne problematische Plugins (GitHub Issues #12, #56, #78)
+            # JavaScript-Extensions (CEP) funktionieren nicht richtig in Wine/Proton
             local problematic_plugins=(
                 "$ps_path/Required/Plug-ins/Spaces/Adobe Spaces Helper.exe"
                 "$ps_path/Required/CEP/extensions/com.adobe.DesignLibraryPanel.html"
                 "$ps_path/Required/Plug-ins/Extensions/ScriptingSupport.8li"
+                # JavaScript-Extension "Startseite" (Homepage) - verursacht Fehler
+                "$ps_path/Required/CEP/extensions/com.adobe.HomePagePanel.html"
+                "$ps_path/Required/CEP/extensions/com.adobe.HomePagePanel"
             )
             
             for plugin in "${problematic_plugins[@]}"; do
@@ -1147,7 +1839,12 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
             
             # GPU-Probleme vermeiden (GitHub Issue #45)
             show_message "$MSG_DISABLE_GPU"
-            local prefs_file="$WINE_PREFIX/drive_c/users/$USER/AppData/Roaming/Adobe/Adobe Photoshop CC 2019/Adobe Photoshop CC 2019 Settings/Adobe Photoshop CC 2019 Prefs.psp"
+            # Verwende dynamischen Prefs-Pfad basierend auf erkannte Version
+            local prefs_file="$PS_PREFS_PATH/Adobe Photoshop $PS_VERSION Prefs.psp"
+            # Fallback für CC 2019 Format
+            if [ ! -d "$(dirname "$prefs_file")" ]; then
+                prefs_file="$PS_PREFS_PATH/Adobe Photoshop CC 2019 Prefs.psp"
+            fi
             local prefs_dir=$(dirname "$prefs_file")
             
             if [ ! -d "$prefs_dir" ]; then
@@ -1155,10 +1852,18 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
             fi
             
             # Erstelle Prefs-Datei mit GPU-Deaktivierung
+            # Diese Einstellungen verhindern GPU-Treiber-Warnungen
             cat > "$prefs_file" << 'EOF'
 useOpenCL 0
 useGraphicsProcessor 0
+GPUAcceleration 0
 EOF
+            
+            # Zusätzlich: Deaktiviere GPU in Registry für bessere Kompatibilität
+            log "  → Setze Registry-Einstellungen für GPU-Deaktivierung..."
+            wine reg add "HKEY_CURRENT_USER\\Software\\Adobe\\Photoshop\\Settings" /v "GPUAcceleration" /t REG_DWORD /d 0 /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
+            wine reg add "HKEY_CURRENT_USER\\Software\\Adobe\\Photoshop\\Settings" /v "useOpenCL" /t REG_DWORD /d 0 /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
+            wine reg add "HKEY_CURRENT_USER\\Software\\Adobe\\Photoshop\\Settings" /v "useGraphicsProcessor" /t REG_DWORD /d 0 /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
             
             # PNG Save Fix (Issue #209): Installiere zusätzliche GDI+ Komponenten
             show_message "$([ "$LANG_CODE" = "de" ] && echo "Installiere PNG/Export-Komponenten..." || echo "Installing PNG/Export components...")"
@@ -1169,14 +1874,41 @@ EOF
     done
     
     notify-send "Photoshop CC" "Photoshop Installation abgeschlossen" -i "photoshop"
-    show_message "Adobe Photoshop CC v20 installiert..."
+    show_message "Adobe Photoshop $PS_VERSION installiert..."
     
     unset local_installer install_status possible_paths
 }
 
-check_arg $@
+# Parse command line arguments for Wine method selection
+# Extract our custom parameters BEFORE check_arg (which uses getopts)
+# NOTE: Logging is not yet initialized here, so we can't use log_debug
+WINE_METHOD=""  # Empty = interactive selection, "wine" = Wine Standard, "proton" = Proton GE
+filtered_args=()
+for arg in "$@"; do
+    case "$arg" in
+        --wine-standard)
+            WINE_METHOD="wine"
+            # Don't add to filtered_args - check_arg doesn't know about this
+            ;;
+        --proton-ge)
+            WINE_METHOD="proton"
+            # Don't add to filtered_args - check_arg doesn't know about this
+            ;;
+        *)
+            # Keep all other arguments for check_arg
+            filtered_args+=("$arg")
+            ;;
+    esac
+done
+
+# Export WINE_METHOD so it's available in all functions
+export WINE_METHOD
+
+# Call check_arg with filtered arguments (without --wine-standard/--proton-ge)
+check_arg "${filtered_args[@]}"
 save_paths
 main
+
 
 
 

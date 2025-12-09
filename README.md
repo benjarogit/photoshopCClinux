@@ -65,7 +65,7 @@ Optimized for CachyOS and all major Linux distributions.
 
 ```bash
 sudo pacman -S wine winetricks
-```
+``` 
 </details>
 
 <details>

@@ -15,7 +15,9 @@
 #               https://github.com/Gictorbit/photoshopCClinux
 ################################################################################
 
-source "sharedFuncs.sh"
+# KRITISCH: Source-Hijacking verhindern - immer absoluten Pfad verwenden
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/sharedFuncs.sh"
 
 function main() {
     # Try to load Photoshop paths, but continue if not installed
@@ -23,6 +25,11 @@ function main() {
         # Photoshop is installed - use its Wine prefix
     RESOURCES_PATH="$SCR_PATH/resources"
     WINE_PREFIX="$SCR_PATH/prefix"
+    # KRITISCH: WINEPREFIX-Validierung - verhindere Manipulation
+    if [[ "$WINE_PREFIX" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
+        echo "ERROR: WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX" >&2
+        exit 1
+    fi
     export WINEPREFIX="$WINE_PREFIX"
         
         echo "═══════════════════════════════════════════════════════════════"
@@ -40,7 +47,12 @@ function main() {
         echo "  Öffne Standard-Wine-Konfiguration..."
         echo ""
         WINE_PREFIX="$HOME/.wine"
-        export WINEPREFIX="$WINE_PREFIX"
+        # KRITISCH: WINEPREFIX-Validierung - verhindere Manipulation
+    if [[ "$WINE_PREFIX" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
+        echo "ERROR: WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX" >&2
+        exit 1
+    fi
+    export WINEPREFIX="$WINE_PREFIX"
         echo "Wine-Prefix: $WINE_PREFIX"
     fi
     echo ""
@@ -74,5 +86,6 @@ function main() {
 }
 
 main
+
 
 

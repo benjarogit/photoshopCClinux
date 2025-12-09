@@ -8,48 +8,61 @@ photoshop/packages/
 photoshop/products/
 photoshop/resources/
 photoshop/replacement/
+photoshop/*.exe
+photoshop/*.dll
+photoshop/*.msi
+photoshop/*.zip
+photoshop/*.pima
+photoshop/*.pimx
+photoshop/*.sig
+photoshop/*.xml
+photoshop/*.json
+photoshop/*.dat
+photoshop/*.idx
 
 # Keep structure but ignore content
 !photoshop/.gitkeep
 !photoshop/README.md
 
 # ============================================================
-# Generated/Temporary Files
+# Runtime/User Data
 # ============================================================
+~/.photoshopCCV19/
+~/.cache/photoshopCCV19/
+~/.psdata.txt
+*.psdata.txt
+logs/
 *.log
 *.backup
 *.bak
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
-
-# ============================================================
-# User-specific Test/Development Files
-# ============================================================
-DATEIEN_UEBERSICHT.txt
-check-system.sh
-validate-changes.sh
-CHANGES.md
-QUICK_START_DE.md
-README_DE.md
-INSTALLATION_DE.md
-
-# Development/Announcement files (not for end users)
-ANNOUNCEMENT.md
-REDDIT_POST.md
-CODE_FIXES.md
-
-# Local development tools
-gitpush.sh
-
-# ============================================================
-# Wine/Installation Output
-# ============================================================
 wine-error.log
 setuplog.log
 photoshop-runtime.log
+
+# ============================================================
+# Temporary Files
+# ============================================================
+*.swp
+*.swo
+*~
+*.tmp
+*.temp
+/tmp/.photoshop_*
+_
+.DS_Store
+Thumbs.db
+.directory
+desktop.ini
+
+# ============================================================
+# Developer Documentation (not for end users)
+# ============================================================
+ATTACK_SCENARIO_REPORT.md
+BLIND_SPOT_AUDIT.md
+CODE_REVIEW_REPORT.md
+RELEASE_NOTES_*.md
+FINAL_CODE_REVIEW.md
+GIT_PUSH_READY.md
 
 # ============================================================
 # IDE/Editor Files
@@ -60,8 +73,13 @@ photoshop-runtime.log
 .cursor/
 
 # ============================================================
-# OS-specific
+# IMPORTANT: Keep redist/ versioned
 # ============================================================
-.directory
-desktop.ini
-
+!allredist/redist/
+!allredist/redist/**/*.exe
+!allredist/x64/
+!allredist/x86/
+!allredist/winetricks
+!allredist/*.sh
+!allredist/*.desktop
+!allredist/*.png

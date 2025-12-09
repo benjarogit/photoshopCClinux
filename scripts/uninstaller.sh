@@ -15,89 +15,237 @@
 #               https://github.com/Gictorbit/photoshopCClinux
 ################################################################################
 
-source "sharedFuncs.sh"
+# KRITISCH: Source-Hijacking verhindern - immer absoluten Pfad verwenden
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/sharedFuncs.sh"
+
+# Detect language (same as setup.sh)
+detect_language() {
+    if [ -z "$LANG_CODE" ]; then
+        if [[ "$LANG" =~ ^de ]]; then
+            LANG_CODE="de"
+        else
+            LANG_CODE="en"
+        fi
+    fi
+}
+
+# Multi-language messages
+msg_uninstall_confirm() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Möchtest du Photoshop CC wirklich deinstallieren?"
+    else
+        echo "Are you sure you want to uninstall Photoshop CC?"
+    fi
+}
+
+msg_goodbye() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Auf Wiedersehen!"
+    else
+        echo "Goodbye!"
+    fi
+}
+
+msg_remove_dir() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Entferne Photoshop-Verzeichnis..."
+    else
+        echo "Removing Photoshop directory..."
+    fi
+}
+
+msg_dir_not_found() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Photoshop-Verzeichnis nicht gefunden!"
+    else
+        echo "Photoshop directory not found!"
+    fi
+}
+
+msg_remove_command() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Entferne Launcher-Befehl..."
+    else
+        echo "Removing launcher command..."
+    fi
+}
+
+msg_command_not_found() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Launcher-Befehl nicht gefunden!"
+    else
+        echo "Launcher command not found!"
+    fi
+}
+
+msg_remove_desktop() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Entferne Desktop-Eintrag..."
+    else
+        echo "Removing desktop entry..."
+    fi
+}
+
+msg_desktop_not_found() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Desktop-Eintrag nicht gefunden!"
+    else
+        echo "Desktop entry not found!"
+    fi
+}
+
+msg_cache_info() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Alle heruntergeladenen Komponenten sind im Cache-Verzeichnis"
+        echo "und können für die nächste Installation wiederverwendet werden."
+        echo "Cache-Verzeichnis:"
+    else
+        echo "All downloaded components are in cache directory"
+        echo "and can be reused for next installation."
+        echo "Cache directory:"
+    fi
+}
+
+msg_delete_cache() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Möchtest du das Cache-Verzeichnis löschen?"
+    else
+        echo "Would you like to delete the cache directory?"
+    fi
+}
+
+msg_cache_removed() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Cache-Verzeichnis entfernt."
+    else
+        echo "Cache directory removed."
+    fi
+}
+
+msg_cache_kept() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Gut, du kannst die heruntergeladenen Daten später für die Installation verwenden."
+    else
+        echo "Nice, you can use downloaded data later for Photoshop installation."
+    fi
+}
+
+msg_cache_not_found() {
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "Cache-Verzeichnis nicht gefunden!"
+    else
+        echo "Cache directory not found!"
+    fi
+}
 
 main() {    
-
-    CMD_PATH="/usr/local/bin/photoshop"
-    ENTRY_PATH="/home/$USER/.local/share/applications/photoshop.desktop"
+    # Detect language
+    detect_language
     
-    notify-send "Photoshop CC" "photoshop uninstaller started" -i "photoshop"
+    CMD_PATH="/usr/local/bin/photoshop"
+    ENTRY_PATH="$HOME/.local/share/applications/photoshop.desktop"
+    
+    if [ "$LANG_CODE" = "de" ]; then
+        notify-send "Photoshop CC" "Photoshop-Deinstaller gestartet" -i "photoshop" 2>/dev/null || true
+    else
+        notify-send "Photoshop CC" "Photoshop uninstaller started" -i "photoshop" 2>/dev/null || true
+    fi
 
-    ask_question "you are uninstalling photoshop cc v19 are you sure?" "N"
-    if [ $result == "no" ];then
-        echo "Ok good Bye :)"
+    ask_question "$(msg_uninstall_confirm)" "N"
+    if [ "$result" = "no" ]; then
+        msg_goodbye
         exit 0
     fi
     
     #remove photoshop directory
     if [ -d "$SCR_PATH" ];then
-        echo "remove photoshop directory..."
-        rm -r "$SCR_PATH" || error2 "couldn't remove photoshop directory"
-        sleep 4
+        msg_remove_dir
+        rm -rf "$SCR_PATH" || error2 "$([ "$LANG_CODE" = "de" ] && echo "Konnte Photoshop-Verzeichnis nicht entfernen" || echo "Couldn't remove Photoshop directory")"
     else
-        echo "photoshop directory Not Found!"
+        msg_dir_not_found
     fi
-    
     
     #Unlink command 
     if [ -L "$CMD_PATH" ];then
-        echo "remove launcher command..."
-        sudo unlink "$CMD_PATH" || error2 "couldn't remove launcher command"
+        msg_remove_command
+        sudo unlink "$CMD_PATH" 2>/dev/null || error2 "$([ "$LANG_CODE" = "de" ] && echo "Konnte Launcher-Befehl nicht entfernen" || echo "Couldn't remove launcher command")"
     else
-        echo "launcher command Not Found!"
+        msg_command_not_found
     fi
 
     #delete desktop entry
     if [ -f "$ENTRY_PATH" ];then
-        echo "remove desktop entry...."
-        echo "$SCR_PATH"
-        rm "$ENTRY_PATH" || error2 "couldn't remove desktop entry"
+        msg_remove_desktop
+        rm "$ENTRY_PATH" 2>/dev/null || error2 "$([ "$LANG_CODE" = "de" ] && echo "Konnte Desktop-Eintrag nicht entfernen" || echo "Couldn't remove desktop entry")"
     else
-        echo "desktop entry Not Found!"
+        msg_desktop_not_found
     fi
 
-    #delete cache directoy
+    #delete cache directory
     if [ -d "$CACHE_PATH" ];then
         echo "--------------------------------"
-        echo "all downloaded components are in cache directory and you can use them for photoshop installation next time without wasting internet traffic"
-        echo -e "your cache directory is \033[1;36m$CACHE_PATH\e[0m"
+        msg_cache_info
+        echo -e "\033[1;36m$CACHE_PATH\033[0m"
         echo "--------------------------------"
-        ask_question "would you delete cache directory?" "N"
-        if [ "$result" == "yes" ];then
-            rm -rf "$CACHE_PATH" || error2 "couldn't remove cache directory"
-            show_message2 "cache directory removed."
+        ask_question "$(msg_delete_cache)" "N"
+        if [ "$result" = "yes" ];then
+            rm -rf "$CACHE_PATH" 2>/dev/null || error2 "$([ "$LANG_CODE" = "de" ] && echo "Konnte Cache-Verzeichnis nicht entfernen" || echo "Couldn't remove cache directory")"
+            msg_cache_removed
         else
-            echo "nice, you can use downloaded data later for photoshop installation"
+            msg_cache_kept
         fi
     else
-        echo "cache directory Not Found!"    
+        msg_cache_not_found
     fi
-
+    
+    # Exit cleanly (fixes hanging issue)
+    if [ "$LANG_CODE" = "de" ]; then
+        echo ""
+        echo "✓ Deinstallation abgeschlossen!"
+    else
+        echo ""
+        echo "✓ Uninstallation completed!"
+    fi
+    exit 0
 }
 
 #parameters [Message] [default flag [Y/N]]
 function ask_question() {
     result=""
-    if [ "$2" == "Y" ];then
-        read -r -p "$1 [Y/n] " response
-        if [[ "$response" =~ $(locale noexpr) ]];then
+    # KRITISCH: == ist nicht POSIX, verwende =
+    if [ "$2" = "Y" ];then
+        # KRITISCH: IFS zurücksetzen nach read
+        local old_IFS="${IFS:-}"
+        IFS= read -r -p "$1 [Y/n] " response
+        if locale noexpr >/dev/null 2>&1 && [[ "$response" =~ $(locale noexpr) ]];then
+            result="no"
+        elif [ -n "$response" ] && [[ "$response" =~ ^[Nn] ]]; then
             result="no"
         else
             result="yes"
         fi
-    elif [ "$2" == "N" ];then
-        read -r -p "$1 [N/y] " response
-        if [[ "$response" =~ $(locale yesexpr) ]];then
+        # KRITISCH: IFS zurücksetzen
+        IFS="$old_IFS"
+    elif [ "$2" = "N" ];then
+        # KRITISCH: IFS zurücksetzen nach read
+        local old_IFS="${IFS:-}"
+        IFS= read -r -p "$1 [N/y] " response
+        if locale yesexpr >/dev/null 2>&1 && [[ "$response" =~ $(locale yesexpr) ]];then
+            result="yes"
+        elif [ -n "$response" ] && [[ "$response" =~ ^[Yy] ]]; then
             result="yes"
         else
             result="no"
         fi
+        # KRITISCH: IFS zurücksetzen
+        IFS="$old_IFS"
     fi
 }
 
 # Load paths with skip_validation=true to allow uninstall even if directories are deleted
 load_paths "true"
 main
+
 
 

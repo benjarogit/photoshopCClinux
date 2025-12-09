@@ -17,7 +17,9 @@
 
 function main() {
     
-    source "sharedFuncs.sh"
+    # KRITISCH: Source-Hijacking verhindern - immer absoluten Pfad verwenden
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    source "$SCRIPT_DIR/sharedFuncs.sh"
 
     load_paths
     WINE_PREFIX="$SCR_PATH/prefix"
@@ -54,5 +56,6 @@ function install_cameraRaw() {
 }
 
 main
+
 
 

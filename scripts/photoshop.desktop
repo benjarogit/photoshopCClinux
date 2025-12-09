@@ -1,13 +1,17 @@
 [Desktop Entry]
 Encoding=UTF-8
 Name=Photoshop CC
-Exec=bash pspath/launcher/launcher.sh
+Exec=bash pspath/launcher/launcher.sh %F
 Type=Application
 StartupNotify=true
-Comment=Photoshop CC for Linux
+Comment=Adobe Photoshop CC for Linux
 Icon=photoshopicon
 StartupWMClass=photoshop.exe
+MimeType=image/vnd.adobe.photoshop;image/x-photoshop;application/x-photoshop;image/psd;application/psd;
+Categories=Graphics;2DGraphics;RasterGraphics;
+Name[de_DE]=Photoshop CC
 Name[fr_FR]=Photoshop CC
+Name[en_US]=Photoshop CC
 
 
 

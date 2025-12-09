@@ -97,7 +97,7 @@ sudo dnf install wine winetricks
 
 Die Photoshop-Installationsdateien befinden sich in:
 ```
-/home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/photoshop/
+<projekt-verzeichnis>/photoshop/
 ```
 
 Diese enthalten:
@@ -122,7 +122,7 @@ sudo ip link set <interface> down
 ### Schritt 2: Setup ausführen
 
 ```bash
-cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5
+cd <projekt-verzeichnis>
 chmod +x setup.sh
 ./setup.sh
 ```
@@ -254,7 +254,7 @@ export __GL_SHADER_DISK_CACHE=0
 
 **Lösung:** Visual C++ Runtime neu installieren
 ```bash
-cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5
+cd <projekt-verzeichnis>
 ./setup.sh
 # Wähle Option 3 (winecfg)
 # Oder manuell:
@@ -365,7 +365,7 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks fontsmooth=rgb
 Falls du RAW-Fotos bearbeiten möchtest:
 
 ```bash
-cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5
+cd <projekt-verzeichnis>
 ./setup.sh
 # Wähle Option 2
 ```
@@ -375,7 +375,7 @@ Camera Raw wird dann von Adobe heruntergeladen (~400 MB).
 ## 🗑️ Deinstallation
 
 ```bash
-cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5
+cd <projekt-verzeichnis>
 ./setup.sh
 # Wähle Option 4 (Uninstall)
 ```
@@ -409,7 +409,7 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks csmt
 
 Bei Vollbild-Problemen:
 ```bash
-cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5
+cd <projekt-verzeichnis>
 ./setup.sh
 # Option 3: Configure wine prefix
 # → Graphics Tab → Enable "Emulate a virtual desktop"

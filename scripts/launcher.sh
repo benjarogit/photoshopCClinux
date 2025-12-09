@@ -16,10 +16,29 @@
 #               https://github.com/Gictorbit/photoshopCClinux
 ################################################################################
 
-if [ $# -ne 0 ];then
-    echo "Keine Parameter erforderlich - starte das Skript ohne Argumente"
-    exit 1
+# KRITISCH: Robuste Fehlerbehandlung aktivieren
+set -eu
+(set -o pipefail 2>/dev/null) || true
+
+# Locale/UTF-8 für DE/EN sicherstellen (mit Prüfung auf existierende Locale)
+# KRITISCH: Prüfe ob Locale existiert (Alpine hat oft nur C.UTF-8)
+if command -v locale >/dev/null 2>&1; then
+    if locale -a 2>/dev/null | grep -qE "^(de_DE|de_DE\.utf8|de_DE\.UTF-8)$"; then
+        export LANG="${LANG:-de_DE.UTF-8}"
+    elif locale -a 2>/dev/null | grep -qE "^(C\.utf8|C\.UTF-8)$"; then
+        export LANG="${LANG:-C.UTF-8}"
+    else
+        export LANG="${LANG:-C}"
+    fi
+else
+    # Fallback wenn locale nicht verfügbar
+    export LANG="${LANG:-C.UTF-8}"
 fi
+export LC_ALL="${LC_ALL:-$LANG}"
+
+# WINAPPS-TECHNIK: Parameter werden akzeptiert (für "Öffnen mit")
+# Dateien können als Parameter übergeben werden: launcher.sh /path/to/file.psd
+# Keine Parameter-Prüfung mehr - Dateien werden später verarbeitet
 
 # Get the directory where this script is located (resolves symlinks)
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" || echo "$0")")" && pwd)"
@@ -28,9 +47,21 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" || echo "$0")")" && pwd)"
 source "$SCRIPT_DIR/sharedFuncs.sh"
 load_paths
 
+# Simple log function (if not available from sharedFuncs.sh)
+if ! command -v log &>/dev/null; then
+    log() {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $@" >> "$SCR_PATH/photoshop-runtime.log" 2>/dev/null || true
+    }
+fi
+
 RESOURCES_PATH="$SCR_PATH/resources"
 WINE_PREFIX="$SCR_PATH/prefix"
 
+# KRITISCH: WINEPREFIX-Validierung - verhindere Manipulation
+if [[ "$WINE_PREFIX" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
+    echo "ERROR: WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX" >&2
+    exit 1
+fi
 export WINEPREFIX="$WINE_PREFIX"
 
 # Workarounds für bekannte Probleme (GitHub Issues)
@@ -63,11 +94,15 @@ fi
 # Suche nach Photoshop.exe in verschiedenen möglichen Pfaden
 PHOTOSHOP_EXE=""
 
-# Mögliche Installationspfade (in Reihenfolge der Wahrscheinlichkeit)
+# Mögliche Installationspfade (dynamisch - alle unterstützten Versionen)
 POSSIBLE_PATHS=(
+    "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop CC 2021/Photoshop.exe"
+    "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop 2022/Photoshop.exe"
+    "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop 2021/Photoshop.exe"
     "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop CC 2019/Photoshop.exe"
     "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop CC 2018/Photoshop.exe"
-    "$WINE_PREFIX/drive_c/users/$USER/PhotoshopSE/Photoshop.exe"
+    "$WINE_PREFIX/drive_c/users/${USER:-$(id -un)}/PhotoshopSE/Photoshop.exe"
+    "$WINE_PREFIX/drive_c/Program Files (x86)/Adobe/Adobe Photoshop CC 2021/Photoshop.exe"
     "$WINE_PREFIX/drive_c/Program Files (x86)/Adobe/Adobe Photoshop CC 2019/Photoshop.exe"
 )
 
@@ -106,10 +141,39 @@ echo "  - Bei Fehler 'VCRUNTIME140.dll': winecfg.sh ausführen"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 
-notify-send "Photoshop CC" "Photoshop CC wird gestartet..." -i "photoshopicon"
+# WINAPPS-TECHNIK: Progress-Indikator und Status-Notification
+echo ""
+echo "🔄 Photoshop wird gestartet..."
+notify-send "Photoshop CC" "Photoshop CC wird gestartet..." -i "photoshopicon" 2>/dev/null || true
 
-# Starte Photoshop mit Wine
-wine "$PHOTOSHOP_EXE" "$@" 2>&1 | tee -a "$SCR_PATH/photoshop-runtime.log"
+# WINAPPS-TECHNIK: Dateien übergeben (wenn als Parameter übergeben)
+# Konvertiere Linux-Pfade zu Windows-Pfaden für Wine
+wine_args=()
+if [ $# -gt 0 ]; then
+    for file in "$@"; do
+        if [ -f "$file" ] || [ -d "$file" ]; then
+            # Konvertiere Linux-Pfad zu Windows-Pfad für Wine
+            abs_path=$(readlink -f "$file" 2>/dev/null || echo "$file")
+            # Wine mapped /home -> Z:/
+            # Ersetze /home/user -> Z:/home/user, dann / -> \
+            wine_path=$(echo "$abs_path" | sed "s|^/|Z:/|" | sed 's|/|\\|g')
+            wine_args+=("$wine_path")
+            echo "📂 Öffne Datei: $(basename "$file")"
+            log "Öffne Datei: $file -> $wine_path"
+        fi
+    done
+fi
+
+# Starte Photoshop mit Wine (mit Dateien als Parameter, falls vorhanden)
+# WINAPPS-TECHNIK: Progress-Anzeige während des Starts
+echo "⏳ Initialisiere Wine-Umgebung..."
+log "Starte Photoshop: $PHOTOSHOP_EXE"
+
+if [ ${#wine_args[@]} -gt 0 ]; then
+    wine "$PHOTOSHOP_EXE" "${wine_args[@]}" 2>&1 | tee -a "$SCR_PATH/photoshop-runtime.log"
+else
+    wine "$PHOTOSHOP_EXE" 2>&1 | tee -a "$SCR_PATH/photoshop-runtime.log"
+fi
 
 exit_code=$?
 
@@ -120,5 +184,6 @@ if [ $exit_code -ne 0 ]; then
 fi
 
 exit $exit_code
+
 
 

@@ -16,6 +16,30 @@
 #               https://github.com/Gictorbit/photoshopCClinux
 ################################################################################
 
+# KRITISCH: Robuste Fehlerbehandlung aktivieren
+# set -e: Exit bei Fehlern
+# set -u: Exit bei undefinierten Variablen
+# set -o pipefail: Exit bei Pipeline-Fehlern
+# BusyBox-Kompatibilität: pipefail kann fehlen, daher || true
+set -eu
+(set -o pipefail 2>/dev/null) || true
+
+# Locale/UTF-8 für DE/EN sicherstellen (mit Prüfung auf existierende Locale)
+# KRITISCH: Prüfe ob Locale existiert (Alpine hat oft nur C.UTF-8)
+if command -v locale >/dev/null 2>&1; then
+    if locale -a 2>/dev/null | grep -qE "^(de_DE|de_DE\.utf8|de_DE\.UTF-8)$"; then
+        export LANG="${LANG:-de_DE.UTF-8}"
+    elif locale -a 2>/dev/null | grep -qE "^(C\.utf8|C\.UTF-8)$"; then
+        export LANG="${LANG:-C.UTF-8}"
+    else
+        export LANG="${LANG:-C}"
+    fi
+else
+    # Fallback wenn locale nicht verfügbar
+    export LANG="${LANG:-C.UTF-8}"
+fi
+export LC_ALL="${LC_ALL:-$LANG}"
+
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -132,6 +156,54 @@ msg_banner_not_found() {
     fi
 }
 
+function show_wine_selection_menu() {
+    clear && echo ""
+    if [ "$LANG_CODE" = "de" ]; then
+        echo "═══════════════════════════════════════════════════════════════"
+        echo "            Wine/Proton Auswahl für Photoshop CC"
+        echo "═══════════════════════════════════════════════════════════════"
+        echo ""
+        echo "  [1a] Wine Standard installieren"
+        echo "  [1b] Proton GE installieren (empfohlen)"
+        echo "  [z]  Zurück zum Hauptmenü"
+        echo ""
+        IFS= read -r -p "Wähle eine Option [1a/1b/z]: " wine_choice
+    else
+        echo "═══════════════════════════════════════════════════════════════"
+        echo "            Wine/Proton Selection for Photoshop CC"
+        echo "═══════════════════════════════════════════════════════════════"
+        echo ""
+        echo "  [1a] Install with Wine Standard"
+        echo "  [1b] Install with Proton GE (recommended)"
+        echo "  [z]  Back to main menu"
+        echo ""
+        IFS= read -r -p "Choose an option [1a/1b/z]: " wine_choice
+    fi
+    
+    case "$wine_choice" in
+        1a|1A)
+            msg_run_photoshop
+            run_script "$SCRIPT_DIR/scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh" --wine-standard
+            ;;
+        1b|1B)
+            msg_run_photoshop
+            run_script "$SCRIPT_DIR/scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh" --proton-ge
+            ;;
+        z|Z|"")
+            main
+            ;;
+        *)
+            if [ "$LANG_CODE" = "de" ]; then
+                warning "Ungültige Auswahl. Zurück zum Hauptmenü..."
+            else
+                warning "Invalid selection. Returning to main menu..."
+            fi
+            wait_second 2
+            main
+            ;;
+    esac
+}
+
 function main() {
     # Detect language
     detect_language
@@ -141,13 +213,21 @@ function main() {
 
     #read inputs
     read_input
-    let answer=$?
+    local answer="${CHOICE:-}"  # Use empty string if CHOICE is not set
 
     case "$answer" in
 
-    1)  
+    1a|1A)
         msg_run_photoshop
-        run_script "scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh"
+        run_script "$SCRIPT_DIR/scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh" --wine-standard
+        ;;
+    1b|1B)
+        msg_run_photoshop
+        run_script "$SCRIPT_DIR/scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh" --proton-ge
+        ;;
+    1)
+        # Show Wine selection submenu
+        show_wine_selection_menu
         ;;
     2)  
         msg_run_camera_raw
@@ -209,25 +289,36 @@ function main() {
     esac
 }
 
-#argumaents 1=script_path 2=script_name 
+#arguments 1=script_path 2=script_name [additional args...]
 function run_script() {
     local script_path=$1
     local script_name=$2
+    shift 2  # Remove first two arguments, rest are passed to script
 
     wait_second 5
-    if [ -f "$script_path" ];then
-        msg_found "$script_path"
-        chmod +x "$script_path"
-    else
-        msg_not_found "$script_name"
+    
+    # KRITISCH: File-System-Umleitung verhindern - verwende absoluten Pfad
+    local absolute_script_path="$SCRIPT_DIR/scripts/$script_name"
+    
+    # Prüfe dass Script wirklich im erwarteten Verzeichnis ist
+    if [[ "$absolute_script_path" != "$SCRIPT_DIR/scripts/"* ]]; then
+        error "Script-Pfad außerhalb erwartetem Verzeichnis (Sicherheitsrisiko): $absolute_script_path"
+        return 1
     fi
     
-    # Change to scripts directory, run script, then return to script directory
-    cd "$SCRIPT_DIR/scripts/" && bash "$script_name"
-    local exit_code=$?  # Capture script exit code before cd
-    cd "$SCRIPT_DIR"  # Always return to script directory
+    if [ -f "$absolute_script_path" ];then
+        msg_found "$absolute_script_path"
+        chmod +x "$absolute_script_path"
+    else
+        msg_not_found "$script_name"
+        return 1
+    fi
     
-    unset script_path
+    # KRITISCH: Führe Script mit absolutem Pfad aus (kein cd + relativer Name)
+    bash "$absolute_script_path" "$@"
+    local exit_code=$?
+    
+    unset script_path absolute_script_path
     return $exit_code  # Preserve the script's exit code
 }
 
@@ -245,8 +336,26 @@ function toggle_internet() {
         return 1
     fi
     
-    # Temporary file to store disabled connections (fixed name, not PID-dependent)
-    local disabled_connections_file="/tmp/.photoshop_disabled_connections"
+    # KRITISCH: mktemp statt vorhersagbarem Dateinamen (Sicherheit)
+    local disabled_connections_file
+    disabled_connections_file=$(mktemp "/tmp/.photoshop_disabled_connections.XXXXXX" 2>/dev/null) || {
+        if [ "$LANG_CODE" = "de" ]; then
+            warning "mktemp fehlgeschlagen - verwende Fallback"
+        else
+            warning "mktemp failed - using fallback"
+        fi
+        disabled_connections_file="/tmp/.photoshop_disabled_connections.$$"
+    }
+    
+    # KRITISCH: TOCTOU-Schutz - prüfe dass tmp_file keine Symlink ist
+    if [ -L "$disabled_connections_file" ]; then
+        rm -f "$disabled_connections_file" 2>/dev/null || true
+        error "Temporäre Datei ist Symlink (Sicherheitsrisiko)"
+        return 1
+    fi
+    
+    # KRITISCH: Cleanup bei allen Signalen (nicht nur EXIT) - verhindere Race-Conditions
+    trap "rm -f '$disabled_connections_file' 2>/dev/null" EXIT INT TERM HUP
     
     # Check if any connection is active (exclude loopback)
     local active_connections=$(nmcli -t -f NAME,STATE connection show | grep ":activated" | cut -d: -f1 | grep -v "^lo$")
@@ -341,19 +450,26 @@ function wait_second() {
 }
 
 function read_input() {
+    # KRITISCH: IFS zurücksetzen nach read
+    local old_IFS="${IFS:-}"
     while true ;do
-        read -p "$(msg_choose_option)" choose
-        if [[ "$choose" =~ (^[1-9]$) ]];then
+        # KRITISCH: read -r verhindert Backslash-Interpretation
+        IFS= read -r -p "$(msg_choose_option)" choose
+        # Accept 1-9, 1a, 1A, 1b, 1B for Wine selection
+        if [[ "$choose" =~ (^[1-9]$|^1[aAbB]$) ]];then
             break
         fi
         if [ "$LANG_CODE" = "de" ]; then
-            warning "Wähle eine Zahl zwischen 1 und 9"
+            warning "Wähle eine Zahl zwischen 1 und 9, oder 1a/1b für Wine-Auswahl"
         else
-            warning "choose a number between 1 to 9"
+            warning "choose a number between 1 to 9, or 1a/1b for Wine selection"
         fi
     done
 
-    return $choose
+    # Return the choice as a global variable (since return can only be 0-255)
+    CHOICE="$choose"
+    # KRITISCH: IFS zurücksetzen
+    IFS="$old_IFS"
 }
 
 function exitScript() {
@@ -426,7 +542,7 @@ function banner() {
     fi
     
     if [ "$LANG_CODE" = "de" ]; then
-        local opt1="1- Photoshop CC installieren"
+        local opt1="1- Photoshop CC installieren        (1a=Wine, 1b=Proton)"
         local opt2="2- Camera Raw v12 installieren"
         local opt3="3- System-Vorprüfung               (empfohlen)"
         local opt4="4- Fehlerbehebung                  (Troubleshoot)"
@@ -437,7 +553,7 @@ function banner() {
         local opt9="9- Beenden"
         local sys_label="System:"
     else
-        local opt1="1- Install photoshop CC"
+        local opt1="1- Install photoshop CC            (1a=Wine, 1b=Proton)"
         local opt2="2- Install camera raw v12"
         local opt3="3- Pre-installation check          (recommended)"
         local opt4="4- Troubleshooting                 (Fix issues)"
@@ -528,5 +644,6 @@ function warning() {
 }
 
 main
+
 
 

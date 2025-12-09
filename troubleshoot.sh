@@ -370,7 +370,7 @@ echo "   → Versuche: WINEPREFIX=$WINE_PREFIX winecfg"
 echo "   → Setze Windows-Version auf Windows 10"
 echo ""
 echo "4. Wine neu konfigurieren:"
-echo "   → cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5"
+echo "   → cd <projekt-verzeichnis>"
 echo "   → ./setup.sh → Option 3"
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
@@ -378,6 +378,7 @@ echo ""
 echo "Weitere Hilfe: README.de.md oder GitHub Issues"
 echo "https://github.com/Gictorbit/photoshopCClinux/issues"
 echo ""
+
 
 
 

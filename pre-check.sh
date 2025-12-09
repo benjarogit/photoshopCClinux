@@ -117,7 +117,10 @@ echo ""
 
 # Check 5: Installation Files
 echo "5. Überprüfe lokale Installationsdateien..."
-PHOTOSHOP_INSTALLER="/home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/photoshop/Set-up.exe"
+# Get script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
+PHOTOSHOP_INSTALLER="$PROJECT_ROOT/photoshop/Set-up.exe"
 
 if [ -f "$PHOTOSHOP_INSTALLER" ]; then
     check_ok "Photoshop Installer gefunden: Set-up.exe"
@@ -127,7 +130,7 @@ if [ -f "$PHOTOSHOP_INSTALLER" ]; then
     echo "   Größe: $INSTALLER_SIZE"
     
     # Check if packages exist
-    PACKAGES_DIR="/home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/photoshop/packages"
+    PACKAGES_DIR="$PROJECT_ROOT/photoshop/packages"
     if [ -d "$PACKAGES_DIR" ]; then
         PACKAGE_COUNT=$(find "$PACKAGES_DIR" -type f | wc -l)
         check_ok "Installations-Pakete gefunden ($PACKAGE_COUNT Dateien)"
@@ -136,7 +139,7 @@ if [ -f "$PHOTOSHOP_INSTALLER" ]; then
     fi
     
     # Check if products exist
-    PRODUCTS_DIR="/home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/photoshop/products"
+    PRODUCTS_DIR="$PROJECT_ROOT/photoshop/products"
     if [ -d "$PRODUCTS_DIR" ]; then
         PRODUCTS_COUNT=$(find "$PRODUCTS_DIR" -type f -name "*.zip" | wc -l)
         check_ok "Produkt-Dateien gefunden ($PRODUCTS_COUNT ZIP-Archive)"
@@ -231,7 +234,7 @@ echo ""
 
 # Check 9: Required Scripts
 echo "9. Überprüfe Installations-Scripts..."
-SCRIPTS_DIR="/home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/scripts"
+SCRIPTS_DIR="$PROJECT_ROOT/scripts"
 
 REQUIRED_SCRIPTS=(
     "PhotoshopSetup.sh"
@@ -275,7 +278,7 @@ if [ $CHECKS_FAILED -eq 0 ]; then
     echo -e "   ${BLUE}nmcli radio wifi off${NC}"
     echo ""
     echo "2. Installation starten:"
-    echo -e "   ${BLUE}cd /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5${NC}"
+    echo -e "   ${BLUE}cd <projekt-verzeichnis>${NC}"
     echo -e "   ${BLUE}./setup.sh${NC}"
     echo ""
     echo "3. Option 1 wählen (install photoshop CC)"
@@ -362,6 +365,7 @@ else
     
     exit 1
 fi
+
 
 
 
