@@ -179,12 +179,39 @@ main() {
         msg_command_not_found
     fi
 
-    #delete desktop entry
-    if [ -f "$ENTRY_PATH" ];then
-        msg_remove_desktop
-        rm "$ENTRY_PATH" 2>/dev/null || error2 "$([ "$LANG_CODE" = "de" ] && echo "Konnte Desktop-Eintrag nicht entfernen" || echo "Couldn't remove desktop entry")"
-    else
+    #delete desktop entry (alle Varianten finden und entfernen)
+    msg_remove_desktop
+    
+    # Suche nach allen möglichen Desktop-Einträgen
+    local desktop_entries=(
+        "$HOME/.local/share/applications/photoshop.desktop"
+        "$HOME/.local/share/applications/Adobe Photoshop CC 2019.desktop"
+        "$HOME/.local/share/applications/Adobe Photoshop.desktop"
+        "$HOME/.local/share/applications/photoshopCC.desktop"
+    )
+    
+    # Suche auch in Wine-Kategorien (z.B. ~/.local/share/applications/wine/Programs/)
+    if [ -d "$HOME/.local/share/applications/wine" ]; then
+        while IFS= read -r -d '' entry; do
+            desktop_entries+=("$entry")
+        done < <(find "$HOME/.local/share/applications/wine" -name "*Photoshop*" -o -name "*photoshop*" -type f -print0 2>/dev/null || true)
+    fi
+    
+    local found_any=false
+    for entry in "${desktop_entries[@]}"; do
+        if [ -f "$entry" ]; then
+            rm "$entry" 2>/dev/null && found_any=true
+            log "Entfernt: $entry" 2>/dev/null || true
+        fi
+    done
+    
+    if [ "$found_any" = false ]; then
         msg_desktop_not_found
+    fi
+    
+    # Aktualisiere Desktop-Datenbank
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
     fi
 
     #delete cache directory

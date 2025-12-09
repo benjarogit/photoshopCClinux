@@ -36,7 +36,7 @@ cleanup_on_interrupt() {
 trap cleanup_on_interrupt INT TERM HUP
 
 # Locale/UTF-8 für DE/EN sicherstellen (mit Prüfung auf existierende Locale)
-# KRITISCH: Prüfe ob Locale existiert (Alpine hat oft nur C.UTF-8)
+# CRITICAL: Check if locale exists (Alpine often only has C.UTF-8)
 if command -v locale >/dev/null 2>&1; then
     if locale -a 2>/dev/null | grep -qE "^(de_DE|de_DE\.utf8|de_DE\.UTF-8)$"; then
         export LANG="${LANG:-de_DE.UTF-8}"
@@ -46,13 +46,14 @@ if command -v locale >/dev/null 2>&1; then
         export LANG="${LANG:-C}"
     fi
 else
-    # Fallback wenn locale nicht verfügbar
+    # Fallback if locale not available
     export LANG="${LANG:-C.UTF-8}"
 fi
 export LC_ALL="${LC_ALL:-$LANG}"
 
-# KRITISCH: Source-Hijacking verhindern - immer absoluten Pfad verwenden
+# CRITICAL: Prevent source hijacking - always use absolute path
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export SCRIPT_DIR  # Export for sharedFuncs.sh::launcher()
 source "$SCRIPT_DIR/sharedFuncs.sh"
 
 # Setup comprehensive logging - ALL output will be logged
@@ -63,11 +64,11 @@ setup_comprehensive_logging() {
     export ERROR_LOG
     export PROJECT_ROOT
     
-    log_debug "Comprehensive logging aktiviert - alle Ausgaben werden automatisch geloggt"
+    log_debug "Comprehensive logging enabled - all output will be automatically logged"
 }
 
 # Setup logging - use project directory (where setup.sh is located)
-# KRITISCH: PATH-Hijacking Prüfung
+# CRITICAL: PATH hijacking check
 if [[ ":$PATH:" == *":.:"* ]] || [[ "$PATH" == .:* ]] || [[ "$PATH" == *:. ]]; then
     export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
 fi
@@ -1406,7 +1407,6 @@ function main() {
     log_debug "=== End Script Initialization ==="
     echo "" >> "$LOG_FILE"
     
-    echo "Erstelle Verzeichnisse..."
     log "Erstelle Verzeichnisse..."
     mkdir -p $SCR_PATH
     log_debug "SCR_PATH erstellt: $SCR_PATH"
@@ -1504,7 +1504,6 @@ function main() {
     # Setze Windows-Version basierend auf erkannte Photoshop-Version
     # OPTIMIERUNG: Neuere Versionen (2021+) funktionieren besser mit Windows 10
     # CC 2019 funktioniert auch mit Windows 10 (bessere Kompatibilität)
-    show_message "$MSG_SET_WIN10"
     log "$MSG_SET_WIN10"
     
     # Für alle Versionen verwende Windows 10 (beste Kompatibilität)
@@ -1518,7 +1517,6 @@ function main() {
     
     # Core-Komponenten: VC++ Runtimes installieren
     # Verwende winetricks (Standard-Methode, bewährt und zuverlässig)
-    show_message "$MSG_VCRUN"
     log "$MSG_VCRUN"
     
     # Installiere VC++ Runtimes mit winetricks (Standard-Methode, bewährt und zuverlässig)
@@ -1543,11 +1541,9 @@ function main() {
     
     rm -f "$winetricks_output_file" 2>/dev/null || true
     
-    show_message "$MSG_FONTS"
     log "$MSG_FONTS"
     winetricks -q atmlib corefonts fontsmooth=rgb >> "$LOG_FILE" 2>&1
     
-    show_message "$MSG_XML"
     log "$MSG_XML"
     winetricks -q msxml3 msxml6 gdiplus >> "$LOG_FILE" 2>&1
     
@@ -1562,7 +1558,6 @@ function main() {
     fi
     
     # Workaround für bekannte Wine-Probleme (GitHub Issue #34)
-    show_message "$MSG_DLL"
     log "$MSG_DLL"
     winetricks -q dxvk_async=disabled d3d11=native >> "$LOG_FILE" 2>&1
     
@@ -1601,7 +1596,7 @@ function main() {
     replacement
 
     if [ -d $RESOURCES_PATH ];then
-        show_message "deleting resources folder"
+        log "deleting resources folder"
         # KRITISCH: Sichere rm -rf mit Validierung
         if [ -z "$RESOURCES_PATH" ]; then
             log_error "RESOURCES_PATH ist leer - überspringe Löschung"
@@ -1627,7 +1622,7 @@ function main() {
 function replacement() {
     # Replacement component ist optional für die lokale Installation
     # Diese Dateien werden normalerweise nur für UI-Icons benötigt
-    show_message "Überspringe replacement component (optional für lokale Installation)..."
+    log "Überspringe replacement component (optional für lokale Installation)..."
     
     # Verwende dynamischen Pfad basierend auf erkannte Version
     local destpath="$PS_INSTALL_PATH/Resources"
@@ -1725,45 +1720,23 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     log "Konfiguriere IE-Engine für Adobe Installer (Best Practice)..."
     log ""
     
-    # IE8 Installation (EMPFOHLEN für Adobe Installer)
+    # IE8 Installation (STANDARD - immer installieren für beste Kompatibilität)
     if [ "$LANG_CODE" = "de" ]; then
-        echo "═══════════════════════════════════════════════════════════════"
-        echo "           IE8-Installation (EMPFOHLEN)"
-        echo "═══════════════════════════════════════════════════════════════"
-        echo ""
-        echo "Der Adobe Installer benötigt eine funktionierende IE-Engine."
-        echo "IE8 verbessert die Kompatibilität erheblich."
-        echo ""
-        echo "Installation dauert ca. 5-10 Minuten (einmalig)."
-        echo ""
-        IFS= read -r -p "IE8 jetzt installieren? [J/n]: " install_ie8
+        log "  → Installiere IE8 über winetricks (dauert 5-10 Minuten)..."
+        log "     (Standard-Installation für beste Kompatibilität mit Adobe Installer)"
     else
-        echo "═══════════════════════════════════════════════════════════════"
-        echo "           IE8 Installation (RECOMMENDED)"
-        echo "═══════════════════════════════════════════════════════════════"
-        echo ""
-        echo "Adobe Installer requires a working IE engine."
-        echo "IE8 significantly improves compatibility."
-        echo ""
-        echo "Installation takes about 5-10 minutes (one-time)."
-        echo ""
-        IFS= read -r -p "Install IE8 now? [Y/n]: " install_ie8
+        log "  → Installing IE8 via winetricks (takes 5-10 minutes)..."
+        log "     (Standard installation for best compatibility with Adobe Installer)"
     fi
     
-    if [[ "$install_ie8" =~ ^[JjYy]$ ]] || [ -z "$install_ie8" ]; then
-        log "  → Installiere IE8 über winetricks (dauert 5-10 Minuten)..."
-        log "     (Dies ist wichtig für funktionierende Buttons im Installer)"
-        if winetricks -q ie8 >> "$LOG_FILE" 2>&1; then
-            log "  ✓ IE8 erfolgreich installiert"
-            # KRITISCH: IE8 setzt Windows-Version auf win7 zurück - muss wieder auf win10 gesetzt werden!
-            log "  → Setze Windows-Version erneut auf Windows 10 (IE8 hat sie auf win7 zurückgesetzt)..."
-            winetricks -q win10 >> "$LOG_FILE" 2>&1 || log "  ⚠ win10 konnte nicht erneut gesetzt werden"
-            log "  ✓ Windows 10 erneut gesetzt"
-        else
-            log "  ⚠ IE8 Installation fehlgeschlagen - verwende Workarounds"
-        fi
+    if winetricks -q ie8 >> "$LOG_FILE" 2>&1; then
+        log "  ✓ IE8 erfolgreich installiert"
+        # KRITISCH: IE8 setzt Windows-Version auf win7 zurück - muss wieder auf win10 gesetzt werden!
+        log "  → Setze Windows-Version erneut auf Windows 10 (IE8 hat sie auf win7 zurückgesetzt)..."
+        winetricks -q win10 >> "$LOG_FILE" 2>&1 || log "  ⚠ win10 konnte nicht erneut gesetzt werden"
+        log "  ✓ Windows 10 erneut gesetzt"
     else
-        log "  ⚠ IE8 Installation übersprungen - Buttons könnten nicht funktionieren"
+        log "  ⚠ IE8 Installation fehlgeschlagen - verwende Workarounds"
     fi
     
     log ""
@@ -1834,7 +1807,7 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     fi
     log ""
     
-    # Adobe Installer: Output nur in Log-Dateien, nicht ins Terminal (reduziert Spam)
+    # Adobe Installer: Output only to log files, not to terminal (reduces spam)
     # Use PIPESTATUS[0] to capture wine's exit code, not tee's
     log "Starte Adobe Installer (Set-up.exe)..."
     wine "$RESOURCES_PATH/photoshop/Set-up.exe" >> "$LOG_FILE" 2>&1 | tee -a "$SCR_PATH/wine-error.log" >/dev/null
@@ -1846,7 +1819,6 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     log ""
     
     if [ $install_status -eq 0 ]; then
-        show_message "$MSG_COMPLETE"
         log "$MSG_COMPLETE"
     else
         if [ "$LANG_CODE" = "de" ]; then
@@ -1941,8 +1913,8 @@ EOF
         fi
     done
     
-    notify-send "Photoshop CC" "Photoshop Installation abgeschlossen" -i "photoshop"
-    show_message "Adobe Photoshop $PS_VERSION installiert..."
+    notify-send "Photoshop CC" "Photoshop Installation abgeschlossen" -i "photoshop" 2>/dev/null || true
+    log "Adobe Photoshop $PS_VERSION installiert..."
     
     unset local_installer install_status possible_paths
 }

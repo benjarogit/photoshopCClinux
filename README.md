@@ -1,5 +1,14 @@
 # Adobe Photoshop Installer for Linux
 
+> [!NOTE]
+> **Experimental Status - Work in Progress**
+> 
+> This project is currently **experimental** and under active development. We have achieved significant progress and success, but continue to encounter setbacks that require further adjustments. We are continuously working on improvements and testing all possible scenarios.
+> 
+> **Every hint, fix, or idea is welcome!** Please report issues, share solutions, or contribute improvements via [GitHub Issues](https://github.com/benjarogit/photoshopCClinux/issues).
+> 
+> Your feedback helps make this project better for everyone! 🙏
+
 ![Photoshop on Linux](images/Screenshot.png)
 
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![Wine](https://img.shields.io/badge/wine-5.0%2B-red) ![Photoshop](https://img.shields.io/badge/Photoshop-CC-blue)

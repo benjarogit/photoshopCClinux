@@ -1,6 +1,15 @@
 # Adobe Photoshop Installation für Linux
 
-![Photoshop Setup Screenshot](images/setup-screenshot-de.png)
+> [!NOTE]
+> **Experimenteller Status - Work in Progress**
+> 
+> Dieses Projekt ist derzeit **experimentell** und in aktiver Entwicklung. Wir haben bereits bedeutende Fortschritte und Erfolge erzielt, stoßen aber weiterhin auf Rückschläge, die weitere Anpassungen erfordern. Wir arbeiten kontinuierlich an Verbesserungen und testen alle möglichen Szenarien.
+> 
+> **Jeder Hinweis, Fix oder Idee ist willkommen!** Bitte melde Probleme, teile Lösungen oder trage Verbesserungen über [GitHub Issues](https://github.com/benjarogit/photoshopCClinux/issues) bei.
+> 
+> Dein Feedback hilft, dieses Projekt für alle besser zu machen! 🙏
+
+![Photoshop on Linux](images/Screenshot.png)
 
 ![Lizenz](https://img.shields.io/badge/license-GPL--3.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![Wine](https://img.shields.io/badge/wine-5.0%2B-red) ![Photoshop](https://img.shields.io/badge/Photoshop-CC-blue)
 
@@ -140,6 +149,8 @@ chmod +x setup.sh
 ```
 
 Wähle **1** für die Photoshop-Installation.
+
+![Setup Screenshot](images/setup-screenshot-de.png)
 
 ### Schritt 4: Installations-Prozess
 

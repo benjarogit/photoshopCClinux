@@ -15,15 +15,15 @@
 #               https://github.com/Gictorbit/photoshopCClinux
 ################################################################################
 
-# KRITISCH: Robuste Fehlerbehandlung (wenn nicht bereits gesetzt)
+# CRITICAL: Robust error handling (if not already set)
 if [ "${BASH_SET_EUO:-}" != "set" ]; then
     set -eu
     (set -o pipefail 2>/dev/null) || true
     export BASH_SET_EUO="set"
 fi
 
-# Locale/UTF-8 für DE/EN sicherstellen (mit Prüfung auf existierende Locale)
-# KRITISCH: Prüfe ob Locale existiert (Alpine hat oft nur C.UTF-8)
+# Locale/UTF-8 for DE/EN (with check for existing locale)
+# CRITICAL: Check if locale exists (Alpine often only has C.UTF-8)
 if command -v locale >/dev/null 2>&1; then
     if locale -a 2>/dev/null | grep -qE "^(de_DE|de_DE\.utf8|de_DE\.UTF-8)$"; then
         export LANG="${LANG:-de_DE.UTF-8}"
@@ -33,23 +33,23 @@ if command -v locale >/dev/null 2>&1; then
         export LANG="${LANG:-C}"
     fi
 else
-    # Fallback wenn locale nicht verfügbar
+    # Fallback if locale not available
     export LANG="${LANG:-C.UTF-8}"
 fi
 export LC_ALL="${LC_ALL:-$LANG}"
 
 #has tow mode [pkgName] [mode=summary]
 function package_installed() {
-    # KRITISCH: command -v statt which (POSIX-konform, sicherer)
-    # KRITISCH: "$1" gequotet gegen Command Injection
+    # CRITICAL: command -v instead of which (POSIX-compliant, safer)
+    # CRITICAL: "$1" quoted against command injection
     if command -v "$1" >/dev/null 2>&1; then
         local pkginstalled=0
     else
         local pkginstalled=1
     fi
 
-    # KRITISCH: == ist nicht POSIX, verwende =
-    # KRITISCH: $2 ist optional, daher ${2:-} verwenden
+    # CRITICAL: == is not POSIX, use =
+    # CRITICAL: $2 is optional, therefore use ${2:-}
     if [ "${2:-}" = "summary" ];then
         if [ "$pkginstalled" -eq 0 ];then
             echo "true"
@@ -216,18 +216,43 @@ function show_message2() {
 function launcher() {
     
     #create launcher script
-    local launcher_path="$PWD/launcher.sh"
+    # KRITISCH: SCRIPT_DIR sollte von aufrufendem Script exportiert werden
+    # Fallback: Versuche es selbst zu ermitteln
+    if [ -z "${SCRIPT_DIR:-}" ]; then
+        # Versuche über BASH_SOURCE (wenn von PhotoshopSetup.sh aufgerufen)
+        local caller_script="${BASH_SOURCE[1]:-}"
+        if [ -n "$caller_script" ] && [ -f "$caller_script" ]; then
+            SCRIPT_DIR="$(cd "$(dirname "$caller_script")" && pwd)" 2>/dev/null || true
+        fi
+        # Letzter Fallback: Versuche scripts/ Verzeichnis relativ zu SCR_PATH zu finden
+        if [ -z "${SCRIPT_DIR:-}" ] && [ -n "${SCR_PATH:-}" ]; then
+            # SCR_PATH ist normalerweise ~/.photoshopCCV19, Projekt ist ein Verzeichnis darüber
+            local possible_script_dir="$(dirname "$(dirname "$SCR_PATH")")/scripts" 2>/dev/null || true
+            if [ -d "$possible_script_dir" ] && [ -f "$possible_script_dir/launcher.sh" ]; then
+                SCRIPT_DIR="$possible_script_dir"
+            fi
+        fi
+    fi
+    
+    # KRITISCH: Prüfe ob SCRIPT_DIR gesetzt ist
+    if [ -z "${SCRIPT_DIR:-}" ]; then
+        error "SCRIPT_DIR ist nicht gesetzt - kann launcher.sh nicht finden"
+        return 1
+    fi
+    
+    # KRITISCH: Verwende SCRIPT_DIR statt PWD (PWD kann falsch sein)
+    local launcher_path="$SCRIPT_DIR/launcher.sh"
     local launcher_dest="$SCR_PATH/launcher"
     rmdir_if_exist "$launcher_dest"
+    mkdir -p "$launcher_dest" || error "can't create launcher directory"
 
-
-    if [ -f "$launcher_path" ];then
+    if [ -f "$launcher_path" ]; then
         show_message "launcher.sh detected..."
         
         cp "$launcher_path" "$launcher_dest" || error "can't copy launcher"
         
         # Copy sharedFuncs.sh to launcher directory so launcher.sh can source it
-        local shared_funcs_path="$PWD/sharedFuncs.sh"
+        local shared_funcs_path="$SCRIPT_DIR/sharedFuncs.sh"
         if [ -f "$shared_funcs_path" ]; then
             cp "$shared_funcs_path" "$launcher_dest" || error "can't copy sharedFuncs.sh"
         else
@@ -240,8 +265,9 @@ function launcher() {
     fi
 
     #create desktop entry
-    local desktop_entry="$PWD/photoshop.desktop"
-    local desktop_entry_dest="/home/$USER/.local/share/applications/photoshop.desktop"
+    # CRITICAL: Use SCRIPT_DIR instead of PWD (PWD can be wrong)
+    local desktop_entry="$SCRIPT_DIR/photoshop.desktop"
+    local desktop_entry_dest="$HOME/.local/share/applications/photoshop.desktop"
     
     if [ -f "$desktop_entry" ];then
         show_message "desktop entry detected..."
@@ -254,10 +280,12 @@ function launcher() {
         cp "$desktop_entry" "$desktop_entry_dest" || error "can't copy desktop entry"
         
         # Replace pspath placeholder in desktop entry
-        # KRITISCH: sed -i GNU/BusyBox Kompatibilität
-        if sed -i '' "s|pspath|$SCR_PATH|g" "$desktop_entry_dest" 2>/dev/null; then
+        # CRITICAL: sed -i GNU/BusyBox compatibility
+        # CRITICAL: Use absolute path and remove "bash" (script is executable)
+        local launcher_script_path="$SCR_PATH/launcher/launcher.sh"
+        if sed -i '' "s|bash pspath/launcher/launcher.sh|$launcher_script_path|g" "$desktop_entry_dest" 2>/dev/null; then
             : # GNU sed (kein Backup)
-        elif sed -i.bak "s|pspath|$SCR_PATH|g" "$desktop_entry_dest" 2>/dev/null; then
+        elif sed -i.bak "s|bash pspath/launcher/launcher.sh|$launcher_script_path|g" "$desktop_entry_dest" 2>/dev/null; then
             rm -f "${desktop_entry_dest}.bak" 2>/dev/null || true
         else
             # KRITISCH: mktemp statt vorhersagbarem .tmp (Symlink-Angriff verhindern)
@@ -278,12 +306,12 @@ function launcher() {
             # KRITISCH: Escaping für sed
             local escaped_path
             escaped_path=$(printf '%s\n' "$SCR_PATH" | sed 's/[[\.*^$()+?{|]/\\&/g; s|/|\\/|g')
-            sed "s|pspath|$escaped_path|g" "$desktop_entry_dest" > "$tmp_file" || {
+            sed "s|bash pspath/launcher/launcher.sh|$launcher_script_path|g" "$desktop_entry_dest" > "$tmp_file" || {
                 rm -f "$tmp_file"
                 error "can't edit desktop entry"
                 return 1
             }
-            # KRITISCH: install statt mv (atomarer)
+            # CRITICAL: install instead of mv (atomic)
             install -m "$(stat -c '%a' "$desktop_entry_dest" 2>/dev/null || echo 644)" "$tmp_file" "$desktop_entry_dest" 2>/dev/null || {
                 if [ -f "$tmp_file" ] && [ ! -L "$tmp_file" ]; then
                     mv "$tmp_file" "$desktop_entry_dest" || {
@@ -312,8 +340,8 @@ function launcher() {
 
     if [ -f "$entry_icon" ]; then
         cp "$entry_icon" "$launcher_dest" || error "can't copy icon image"
-        # KRITISCH: sed -i GNU/BusyBox Kompatibilität + Sicherheit
-        # KRITISCH: Escaping für sed Pattern/Replacement
+        # CRITICAL: sed -i GNU/BusyBox compatibility + security
+        # CRITICAL: Escaping for sed pattern/replacement
         sed_escape() {
             # Escape sed-spezielle Zeichen: / \ & . * ^ $ ( ) + ? { | [ ]
             printf '%s\n' "$1" | sed 's/[[\.*^$()+?{|]/\\&/g; s|/|\\/|g'
@@ -352,7 +380,7 @@ function launcher() {
                     rm -f "$tmp_file"
                     return 1
                 }
-                # KRITISCH: install statt mv (atomarer auf vielen Filesystemen)
+                # CRITICAL: install instead of mv (atomic on many filesystems)
                 install -m "$(stat -c '%a' "$file" 2>/dev/null || echo 644)" "$tmp_file" "$file" 2>/dev/null || {
                     # Fallback zu mv mit Prüfung
                     if [ -f "$tmp_file" ] && [ ! -L "$tmp_file" ]; then
@@ -371,7 +399,7 @@ function launcher() {
         safe_sed_replace "$desktop_entry_dest" "photoshopicon" "$launch_icon" || error "can't edit desktop entry"
         safe_sed_replace "$launcher_dest/launcher.sh" "photoshopicon" "$launch_icon" || error "can't edit launcher script"
     else
-        warning "Icon nicht gefunden, verwende Standard-Icon"
+        warning "Icon not found, using default icon"
     fi
     
     # WINAPPS-TECHNIK: MIME-Type Registrierung für "Öffnen mit Photoshop"
@@ -436,7 +464,7 @@ EOF
     
     #create photoshop command
     show_message "create photoshop command..."
-    # KRITISCH: Validierung BEVOR sudo-Operation - verhindere Privilege-Escalation
+    # CRITICAL: Validation BEFORE sudo operation - prevent privilege escalation
     if [[ "$SCR_PATH" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
         error "SCR_PATH zeigt auf System-Verzeichnis (Sicherheitsrisiko): $SCR_PATH"
         return 1
@@ -503,7 +531,7 @@ function set_dark_mod() {
 }
 
 function export_var() {
-    # KRITISCH: WINEPREFIX-Validierung - verhindere Manipulation
+    # CRITICAL: WINEPREFIX validation - prevent manipulation
     if [[ "$WINE_PREFIX" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
         error "WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX"
         return 1
@@ -517,7 +545,7 @@ function download_component() {
     local tout=0
     local url="$3"
     
-    # KRITISCH: Download-URL-Validierung - verhindere bösartige URLs
+    # CRITICAL: Download URL validation - prevent malicious URLs
     # Whitelist: Nur erlaubte Domains
     local allowed_domains=(
         "github.com"
@@ -529,7 +557,7 @@ function download_component() {
     
     # Prüfe dass URL mit https:// beginnt (HTTPS-Erzwingung)
     if [[ ! "$url" =~ ^https:// ]]; then
-        error "Download-URL muss HTTPS verwenden (Sicherheitsrisiko): $url"
+        error "Download URL must use HTTPS (security risk): $url"
         return 1
     fi
     
@@ -591,7 +619,7 @@ function download_component() {
 }
 
 function rmdir_if_exist() {
-    # KRITISCH: Sichere rm -rf mit Validierung
+    # CRITICAL: Safe rm -rf with validation
     local dir="$1"
     if [ -z "$dir" ]; then
         error "rmdir_if_exist: Verzeichnisname ist leer"

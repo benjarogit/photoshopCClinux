@@ -16,12 +16,12 @@
 #               https://github.com/Gictorbit/photoshopCClinux
 ################################################################################
 
-# KRITISCH: Robuste Fehlerbehandlung aktivieren
+# CRITICAL: Enable robust error handling
 set -eu
 (set -o pipefail 2>/dev/null) || true
 
-# Locale/UTF-8 für DE/EN sicherstellen (mit Prüfung auf existierende Locale)
-# KRITISCH: Prüfe ob Locale existiert (Alpine hat oft nur C.UTF-8)
+# Locale/UTF-8 for DE/EN (with check for existing locale)
+# CRITICAL: Check if locale exists (Alpine often only has C.UTF-8)
 if command -v locale >/dev/null 2>&1; then
     if locale -a 2>/dev/null | grep -qE "^(de_DE|de_DE\.utf8|de_DE\.UTF-8)$"; then
         export LANG="${LANG:-de_DE.UTF-8}"
@@ -31,7 +31,7 @@ if command -v locale >/dev/null 2>&1; then
         export LANG="${LANG:-C}"
     fi
 else
-    # Fallback wenn locale nicht verfügbar
+    # Fallback if locale not available
     export LANG="${LANG:-C.UTF-8}"
 fi
 export LC_ALL="${LC_ALL:-$LANG}"
