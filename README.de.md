@@ -1,6 +1,6 @@
 # Adobe Photoshop Installation für Linux
 
-![Photoshop unter Linux](images/Screenshot.png)
+![Photoshop Setup Screenshot](images/setup-screenshot-de.png)
 
 ![Lizenz](https://img.shields.io/badge/license-GPL--3.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![Wine](https://img.shields.io/badge/wine-5.0%2B-red) ![Photoshop](https://img.shields.io/badge/Photoshop-CC-blue)
 

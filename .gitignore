@@ -22,7 +22,6 @@ photoshop/*.idx
 
 # Keep structure but ignore content
 !photoshop/.gitkeep
-!photoshop/README.md
 
 # ============================================================
 # Runtime/User Data
