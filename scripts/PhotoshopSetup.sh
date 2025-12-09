@@ -1514,7 +1514,7 @@ function main() {
     else
         log "  → Verwende Windows 10 (auch für ${PS_VERSION:-unknown} kompatibel)"
     fi
-    winetricks -q win10 2>&1 | tee -a "$LOG_FILE"
+    winetricks -q win10 >> "$LOG_FILE" 2>&1
     
     # Core-Komponenten: VC++ Runtimes installieren
     # Verwende winetricks (Standard-Methode, bewährt und zuverlässig)
@@ -1545,26 +1545,26 @@ function main() {
     
     show_message "$MSG_FONTS"
     log "$MSG_FONTS"
-    winetricks -q atmlib corefonts fontsmooth=rgb 2>&1 | tee -a "$LOG_FILE"
+    winetricks -q atmlib corefonts fontsmooth=rgb >> "$LOG_FILE" 2>&1
     
     show_message "$MSG_XML"
     log "$MSG_XML"
-    winetricks -q msxml3 msxml6 gdiplus 2>&1 | tee -a "$LOG_FILE"
+    winetricks -q msxml3 msxml6 gdiplus >> "$LOG_FILE" 2>&1
     
     # OPTIMIERUNG: Für neuere Versionen (2021+) zusätzliche Komponenten
     # KRITISCH: PS_VERSION mit ${PS_VERSION:-} schützen
     if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
         log "  → Installiere zusätzliche Komponenten für ${PS_VERSION:-unknown}..."
         # dotnet48 wird für neuere Photoshop-Versionen benötigt
-        winetricks -q dotnet48 2>&1 | tee -a "$LOG_FILE" || log "  ⚠ dotnet48 Installation fehlgeschlagen (optional)"
+        winetricks -q dotnet48 >> "$LOG_FILE" 2>&1 || log "  ⚠ dotnet48 Installation fehlgeschlagen (optional)"
         # vcrun2019 für neuere Versionen (optional)
-        winetricks -q vcrun2019 2>&1 | tee -a "$LOG_FILE" || log "  ⚠ vcrun2019 Installation fehlgeschlagen (optional)"
+        winetricks -q vcrun2019 >> "$LOG_FILE" 2>&1 || log "  ⚠ vcrun2019 Installation fehlgeschlagen (optional)"
     fi
     
     # Workaround für bekannte Wine-Probleme (GitHub Issue #34)
     show_message "$MSG_DLL"
     log "$MSG_DLL"
-    winetricks -q dxvk_async=disabled d3d11=native 2>&1 | tee -a "$LOG_FILE"
+    winetricks -q dxvk_async=disabled d3d11=native >> "$LOG_FILE" 2>&1
     
     # Zusätzliche Performance & Rendering Fixes
     show_message "$([ "$LANG_CODE" = "de" ] && echo "Konfiguriere Wine-Registry für bessere Performance..." || echo "Configuring Wine registry for better performance...")"
@@ -1572,7 +1572,7 @@ function main() {
     
     # Enable CSMT for better performance (Command Stream Multi-Threading)
     log "  - CSMT aktivieren"
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v csmt /t REG_DWORD /d 1 /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v csmt /t REG_DWORD /d 1 /f >> "$LOG_FILE" 2>&1 || true
     
     # Disable shader cache to avoid corruption (Issue #206 - Black Screen)
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v shader_backend /t REG_SZ /d glsl /f 2>/dev/null || true
@@ -1585,8 +1585,13 @@ function main() {
     
     # Fix UI scaling issues (Issue #56)
     show_message "$([ "$LANG_CODE" = "de" ] && echo "Konfiguriere DPI-Skalierung..." || echo "Configuring DPI scaling...")"
-    wine reg add "HKEY_CURRENT_USER\\Control Panel\\Desktop" /v LogPixels /t REG_DWORD /d 96 /f 2>/dev/null || true
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Fonts" /v Smoothing /t REG_DWORD /d 2 /f 2>/dev/null || true
+    wine reg add "HKEY_CURRENT_USER\\Control Panel\\Desktop" /v LogPixels /t REG_DWORD /d 96 /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Fonts" /v Smoothing /t REG_DWORD /d 2 /f >> "$LOG_FILE" 2>&1 || true
+    
+    # KRITISCH: Windows-Version nochmal explizit auf Windows 10 setzen
+    # (winetricks-Installationen können die Version zurücksetzen, besonders IE8)
+    log "  → Stelle sicher, dass Windows-Version auf Windows 10 gesetzt ist (vor Adobe Installer)..."
+    winetricks -q win10 >> "$LOG_FILE" 2>&1 || log "  ⚠ win10 konnte nicht gesetzt werden"
     
     #install photoshop
     sleep 3
@@ -1748,8 +1753,12 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     if [[ "$install_ie8" =~ ^[JjYy]$ ]] || [ -z "$install_ie8" ]; then
         log "  → Installiere IE8 über winetricks (dauert 5-10 Minuten)..."
         log "     (Dies ist wichtig für funktionierende Buttons im Installer)"
-        if winetricks -q ie8 2>&1 | tee -a "$LOG_FILE"; then
+        if winetricks -q ie8 >> "$LOG_FILE" 2>&1; then
             log "  ✓ IE8 erfolgreich installiert"
+            # KRITISCH: IE8 setzt Windows-Version auf win7 zurück - muss wieder auf win10 gesetzt werden!
+            log "  → Setze Windows-Version erneut auf Windows 10 (IE8 hat sie auf win7 zurückgesetzt)..."
+            winetricks -q win10 >> "$LOG_FILE" 2>&1 || log "  ⚠ win10 konnte nicht erneut gesetzt werden"
+            log "  ✓ Windows 10 erneut gesetzt"
         else
             log "  ⚠ IE8 Installation fehlgeschlagen - verwende Workarounds"
         fi
@@ -1763,23 +1772,23 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     
     # Best Practice: native,builtin (versuche native zuerst, dann builtin als Fallback)
     # Für kritische IE-Komponenten verwenden wir native,builtin
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v mshtml /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v jscript /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v vbscript /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v urlmon /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v wininet /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v shdocvw /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v ieframe /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v actxprxy /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v browseui /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v mshtml /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v jscript /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v vbscript /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v urlmon /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v wininet /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v shdocvw /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v ieframe /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v actxprxy /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v browseui /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true
     # Dxtrans.dll und msimtf.dll - für JavaScript/IE-Engine (verhindert viele Fehler im Log)
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v dxtrans /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v msimtf /t REG_SZ /d "native,builtin" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v dxtrans /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v msimtf /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true
     
     # Zusätzliche Registry-Tweaks für bessere IE-Kompatibilität
     log "  → Setze Registry-Tweaks für IE-Kompatibilität..."
-    wine reg add "HKEY_CURRENT_USER\\Software\\Microsoft\\Internet Explorer\\Main" /v "DisableScriptDebugger" /t REG_SZ /d "yes" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-    wine reg add "HKEY_CURRENT_USER\\Software\\Microsoft\\Internet Explorer\\Main" /v "DisableFirstRunCustomize" /t REG_SZ /d "1" /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Microsoft\\Internet Explorer\\Main" /v "DisableScriptDebugger" /t REG_SZ /d "yes" /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Microsoft\\Internet Explorer\\Main" /v "DisableFirstRunCustomize" /t REG_SZ /d "1" /f >> "$LOG_FILE" 2>&1 || true
     
     log ""
     log "═══════════════════════════════════════════════════════════════"
@@ -1825,9 +1834,10 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     fi
     log ""
     
-    # Log both to our log file and wine-error.log
+    # Adobe Installer: Output nur in Log-Dateien, nicht ins Terminal (reduziert Spam)
     # Use PIPESTATUS[0] to capture wine's exit code, not tee's
-    wine "$RESOURCES_PATH/photoshop/Set-up.exe" 2>&1 | tee -a "$LOG_FILE" >> "$SCR_PATH/wine-error.log"
+    log "Starte Adobe Installer (Set-up.exe)..."
+    wine "$RESOURCES_PATH/photoshop/Set-up.exe" >> "$LOG_FILE" 2>&1 | tee -a "$SCR_PATH/wine-error.log" >/dev/null
     
     local install_status=${PIPESTATUS[0]}
     
@@ -1919,9 +1929,9 @@ EOF
             
             # Zusätzlich: Deaktiviere GPU in Registry für bessere Kompatibilität
             log "  → Setze Registry-Einstellungen für GPU-Deaktivierung..."
-            wine reg add "HKEY_CURRENT_USER\\Software\\Adobe\\Photoshop\\Settings" /v "GPUAcceleration" /t REG_DWORD /d 0 /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-            wine reg add "HKEY_CURRENT_USER\\Software\\Adobe\\Photoshop\\Settings" /v "useOpenCL" /t REG_DWORD /d 0 /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-            wine reg add "HKEY_CURRENT_USER\\Software\\Adobe\\Photoshop\\Settings" /v "useGraphicsProcessor" /t REG_DWORD /d 0 /f 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
+            wine reg add "HKEY_CURRENT_USER\\Software\\Adobe\\Photoshop\\Settings" /v "GPUAcceleration" /t REG_DWORD /d 0 /f >> "$LOG_FILE" 2>&1 || true
+            wine reg add "HKEY_CURRENT_USER\\Software\\Adobe\\Photoshop\\Settings" /v "useOpenCL" /t REG_DWORD /d 0 /f >> "$LOG_FILE" 2>&1 || true
+            wine reg add "HKEY_CURRENT_USER\\Software\\Adobe\\Photoshop\\Settings" /v "useGraphicsProcessor" /t REG_DWORD /d 0 /f >> "$LOG_FILE" 2>&1 || true
             
             # PNG Save Fix (Issue #209): Installiere zusätzliche GDI+ Komponenten
             show_message "$([ "$LANG_CODE" = "de" ] && echo "Installiere PNG/Export-Komponenten..." || echo "Installing PNG/Export components...")"
