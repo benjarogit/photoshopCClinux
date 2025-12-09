@@ -229,6 +229,8 @@ function main() {
     2)  
         msg_run_camera_raw
         run_script "scripts/cameraRawInstaller.sh" "cameraRawInstaller.sh"
+        wait_second 2
+        main
         ;;
     3)  
         msg_pre_check
@@ -240,6 +242,8 @@ function main() {
         else
             error "pre-check.sh not found at $precheck_path"
         fi
+        wait_second 2
+        main
         ;;
     4)  
         msg_troubleshoot
@@ -251,14 +255,20 @@ function main() {
         else
             error "troubleshoot.sh not found at $troubleshoot_path"
         fi
+        wait_second 2
+        main
         ;;
     5)  
         msg_run_winecfg
         run_script "scripts/winecfg.sh" "winecfg.sh"
+        wait_second 2
+        main
         ;;
     6)  
         msg_uninstall
         run_script "scripts/uninstaller.sh" "uninstaller.sh"
+        wait_second 2
+        main
         ;;
     7)  
         # Toggle Internet

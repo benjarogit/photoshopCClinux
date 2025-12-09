@@ -1,8 +1,0 @@
-[Desktop Entry]
-Name=Photoshop CC 2021
-Exec=bash -c "~/.WineApps/Adobe-Photoshop/drive_c/launcher.sh %F"
-Type=Application
-Comment=Photoshop CC 2021 (Wine)
-Categories=Graphics;
-Icon=photoshop
-StartupWMClass=photoshop.exe

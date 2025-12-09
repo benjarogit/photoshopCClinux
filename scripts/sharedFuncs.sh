@@ -49,7 +49,8 @@ function package_installed() {
     fi
 
     # KRITISCH: == ist nicht POSIX, verwende =
-    if [ "$2" = "summary" ];then
+    # KRITISCH: $2 ist optional, daher ${2:-} verwenden
+    if [ "${2:-}" = "summary" ];then
         if [ "$pkginstalled" -eq 0 ];then
             echo "true"
         else
@@ -72,11 +73,11 @@ function package_installed() {
 # Get main log file if available (from PhotoshopSetup.sh)
 get_main_log() {
     # Try to find the main log file from environment or project root
-    if [ -n "$LOG_FILE" ]; then
-        echo "$LOG_FILE"
-    elif [ -n "$PROJECT_ROOT" ] && [ -d "$PROJECT_ROOT/logs" ]; then
+    if [ -n "${LOG_FILE:-}" ]; then
+        echo "${LOG_FILE}"
+    elif [ -n "${PROJECT_ROOT:-}" ] && [ -d "${PROJECT_ROOT}/logs" ]; then
         # Find the most recent log file
-        ls -t "$PROJECT_ROOT/logs"/*.log 2>/dev/null | head -1 || echo ""
+        ls -t "${PROJECT_ROOT}/logs"/*.log 2>/dev/null | head -1 || echo ""
     else
         echo ""
     fi
@@ -87,13 +88,18 @@ function setup_log() {
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     
     # Log to main log if available
-    if [ -n "$main_log" ] && [ -f "$main_log" ]; then
-        echo "[$timestamp] $@" >> "$main_log"
+    if [ -n "${main_log:-}" ] && [ -f "${main_log}" ]; then
+        echo "[$timestamp] $@" >> "${main_log}"
     fi
     
-    # Also log to old location for compatibility
-    if [ -n "$SCR_PATH" ]; then
-        echo -e "$(date) : $@" >> "$SCR_PATH/setuplog.log" 2>/dev/null || true
+    # Also log to new LOG_FILE if available (from PhotoshopSetup.sh)
+    if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
+        echo "[$timestamp] $@" >> "${LOG_FILE}" 2>/dev/null || true
+    fi
+    
+    # Also log to old location for compatibility (only if SCR_PATH is set and directory exists)
+    if [ -n "${SCR_PATH:-}" ] && [ -d "${SCR_PATH:-}" ]; then
+        echo -e "$(date) : $@" >> "${SCR_PATH}/setuplog.log" 2>/dev/null || true
     fi
 }
 
@@ -101,11 +107,26 @@ function show_message() {
     local main_log=$(get_main_log)
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     
+    # Log to main log file if available
+    if [ -n "${main_log:-}" ] && [ -f "${main_log}" ]; then
+        echo "[$timestamp] $@" >> "${main_log}"
+    fi
+    
+    # Also log to new LOG_FILE if available (from PhotoshopSetup.sh)
+    if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
+        echo "[$timestamp] $@" >> "${LOG_FILE}"
+    fi
+    
+    # Also log to old setuplog.log for compatibility
+    if [ -n "${SCR_PATH:-}" ] && [ -d "${SCR_PATH:-}" ]; then
+        echo -e "$(date) : $@" >> "${SCR_PATH}/setuplog.log" 2>/dev/null || true
+    fi
+    
     echo -e "$@"
     
     # Log to main log if available
-    if [ -n "$main_log" ] && [ -f "$main_log" ]; then
-        echo "[$timestamp] $@" >> "$main_log"
+    if [ -n "${main_log:-}" ] && [ -f "${main_log}" ]; then
+        echo "[$timestamp] $@" >> "${main_log}"
     fi
     
     # Also log to old location for compatibility
@@ -187,8 +208,8 @@ function show_message2() {
     echo -e "$@"
     
     # Log to main log if available
-    if [ -n "$main_log" ] && [ -f "$main_log" ]; then
-        echo "[$timestamp] $@" >> "$main_log"
+    if [ -n "${main_log:-}" ] && [ -f "${main_log}" ]; then
+        echo "[$timestamp] $@" >> "${main_log}"
     fi
 }
 
@@ -533,7 +554,7 @@ function download_component() {
         fi
         if [ -f $1 ];then
             local FILE_ID=$(md5sum $1 | cut -d" " -f1)
-            if [ "$FILE_ID" = "$2" ];then
+            if [ "$FILE_ID" = "${2:-}" ];then
                 show_message "\033[1;36m$4\e[0m detected"
                 return 0
             else
@@ -589,6 +610,10 @@ function rmdir_if_exist() {
 }
 
 function check_arg() {
+    # Initialize variables before use (required for set -u)
+    local dashd=0
+    local dashc=0
+    
     while getopts "hd:c:" OPTION; do
         case $OPTION in
         d)
@@ -597,12 +622,14 @@ function check_arg() {
             
             dashd=1
             echo "install path is $SCR_PATH"
+            setup_log "install path is $SCR_PATH"
             ;;
         c)
             PARAMc="$OPTARG"
             CACHE_PATH=$(readlink -f "$PARAMc")
             dashc=1
             echo "cahce is $CACHE_PATH"
+            setup_log "cache is $CACHE_PATH"
             ;;
         h)
             usage
@@ -622,6 +649,7 @@ function check_arg() {
 
     if [[ $dashd != 1 ]] ;then
         echo "-d not define default directory used..."
+        setup_log "-d not define default directory used..."
         # KRITISCH: Umgebungsvariablen-Validierung - prüfe dass $HOME sicher ist
         if [ -z "$HOME" ] || [ "$HOME" = "/" ] || [ "$HOME" = "/root" ]; then
             error "Unsichere HOME-Umgebungsvariable: ${HOME:-not set}"
@@ -632,6 +660,7 @@ function check_arg() {
 
     if [[ $dashc != 1 ]];then
         echo "-c not define default directory used..."
+        setup_log "-c not define default directory used..."
         # KRITISCH: Umgebungsvariablen-Validierung - prüfe dass $HOME sicher ist
         if [ -z "$HOME" ] || [ "$HOME" = "/" ] || [ "$HOME" = "/root" ]; then
             error "Unsichere HOME-Umgebungsvariable: ${HOME:-not set}"
@@ -660,8 +689,9 @@ function ask_question() {
     # KRITISCH: == ist nicht POSIX, verwende =
     # KRITISCH: read -r mit IFS= für Whitespace-Sicherheit
     # KRITISCH: IFS zurücksetzen nach read
+    # KRITISCH: $2 ist optional, daher ${2:-} verwenden
     local old_IFS="${IFS:-}"
-    if [ "$2" = "Y" ];then
+    if [ "${2:-}" = "Y" ];then
         IFS= read -r -p "$1 [Y/n] " response
         # KRITISCH: locale yesexpr/noexpr kann fehlen, Fallback
         if locale noexpr >/dev/null 2>&1 && [[ "$response" =~ $(locale noexpr) ]];then
@@ -671,7 +701,7 @@ function ask_question() {
         else
             question_result="yes"
         fi
-    elif [ "$2" = "N" ];then
+    elif [ "${2:-}" = "N" ];then
         IFS= read -r -p "$1 [N/y] " response
         if locale yesexpr >/dev/null 2>&1 && [[ "$response" =~ $(locale yesexpr) ]];then
             question_result="yes"

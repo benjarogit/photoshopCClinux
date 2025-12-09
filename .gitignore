@@ -82,11 +82,3 @@ CHANGELOG.md
 # ============================================================
 # IMPORTANT: Keep redist/ versioned
 # ============================================================
-!allredist/redist/
-!allredist/redist/**/*.exe
-!allredist/x64/
-!allredist/x86/
-!allredist/winetricks
-!allredist/*.sh
-!allredist/*.desktop
-!allredist/*.png

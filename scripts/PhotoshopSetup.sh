@@ -20,6 +20,21 @@
 set -eu
 (set -o pipefail 2>/dev/null) || true
 
+# KRITISCH: Trap für STRG+C (INT) und andere Signale - MUSS ganz am Anfang gesetzt werden
+# Wird auch in Unterprozessen benötigt (winetricks, wine, etc.)
+cleanup_on_interrupt() {
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "Installation abgebrochen durch Benutzer (STRG+C)"
+    echo "═══════════════════════════════════════════════════════════════"
+    # Log error if LOG_FILE is available
+    if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Installation abgebrochen durch Benutzer (STRG+C)" >> "${LOG_FILE}"
+    fi
+    exit 130
+}
+trap cleanup_on_interrupt INT TERM HUP
+
 # Locale/UTF-8 für DE/EN sicherstellen (mit Prüfung auf existierende Locale)
 # KRITISCH: Prüfe ob Locale existiert (Alpine hat oft nur C.UTF-8)
 if command -v locale >/dev/null 2>&1; then
@@ -1243,9 +1258,123 @@ else
     MSG_DISABLE_GPU="Disabling GPU acceleration in Photoshop settings..."
 fi
 
+# Detect Photoshop version from installer files or directory structure
+# Uses multiple methods: pev/peres tool, directory structure, or file metadata
+detect_photoshop_version() {
+    local installer_dir="$PROJECT_ROOT/photoshop"
+    local version="CC 2019"  # Default fallback
+    local setup_exe="$installer_dir/Set-up.exe"
+    
+    if [ ! -f "$setup_exe" ]; then
+        echo "$version"
+        return 0
+    fi
+    
+    # METHOD 1: Try to extract version from EXE using pev/peres (if available)
+    # Based on: https://askubuntu.com/questions/23454/how-to-view-a-pe-exe-dll-file-version-information
+    if command -v peres >/dev/null 2>&1; then
+        local exe_version=$(peres -v "$setup_exe" 2>/dev/null | awk '{print $3}' | head -1)
+        if [ -n "$exe_version" ] && [[ "$exe_version" =~ ^[0-9] ]]; then
+            # Convert version number to version string
+            # Photoshop CC 2019 = v20.x, 2021 = v22.x, 2022 = v23.x
+            local major_version=$(echo "$exe_version" | cut -d. -f1)
+            if [ "$major_version" -ge 23 ]; then
+                version="2022"
+            elif [ "$major_version" -ge 22 ]; then
+                version="2021"
+            elif [ "$major_version" -ge 20 ]; then
+                version="CC 2019"
+            fi
+        fi
+    fi
+    
+    # METHOD 2: Check directory structure in installer
+    if [ "$version" = "CC 2019" ]; then  # Only if method 1 didn't find version
+        # Check for version-specific directories
+        for dir in "$installer_dir"/Adobe\ Photoshop*; do
+            if [ -d "$dir" ]; then
+                local dirname=$(basename "$dir")
+                if [[ "$dirname" =~ "2022" ]]; then
+                    version="2022"
+                    break
+                elif [[ "$dirname" =~ "2021" ]]; then
+                    version="2021"
+                    break
+                elif [[ "$dirname" =~ "CC 2019" ]] || [[ "$dirname" =~ "2019" ]]; then
+                    version="CC 2019"
+                    break
+                fi
+            fi
+        done
+    fi
+    
+    # METHOD 3: Try to extract version from strings in EXE (fallback)
+    if [ "$version" = "CC 2019" ] && command -v strings >/dev/null 2>&1; then
+        local version_string=$(strings "$setup_exe" 2>/dev/null | grep -iE "photoshop.*(202[12]|20\.|CC 2019)" | head -1)
+        if [ -n "$version_string" ]; then
+            if [[ "$version_string" =~ "2022" ]]; then
+                version="2022"
+            elif [[ "$version_string" =~ "2021" ]]; then
+                version="2021"
+            elif [[ "$version_string" =~ "CC 2019" ]] || [[ "$version_string" =~ "2019" ]]; then
+                version="CC 2019"
+            fi
+        fi
+    fi
+    
+    echo "$version"
+}
+
+# Get Photoshop installation path based on version
+get_photoshop_install_path() {
+    local version="${1:-CC 2019}"
+    local wine_prefix="${WINE_PREFIX:-$SCR_PATH/prefix}"
+    local user="${USER:-$(id -un)}"
+    
+    # Convert version to path format
+    if [[ "$version" =~ "CC 2019" ]]; then
+        echo "$wine_prefix/drive_c/Program Files/Adobe/Adobe Photoshop CC 2019"
+    elif [[ "$version" =~ "2021" ]]; then
+        echo "$wine_prefix/drive_c/Program Files/Adobe/Adobe Photoshop 2021"
+    elif [[ "$version" =~ "2022" ]]; then
+        echo "$wine_prefix/drive_c/Program Files/Adobe/Adobe Photoshop 2022"
+    else
+        # Fallback to CC 2019 path
+        echo "$wine_prefix/drive_c/Program Files/Adobe/Adobe Photoshop CC 2019"
+    fi
+}
+
+# Get Photoshop preferences path based on version
+get_photoshop_prefs_path() {
+    local version="${1:-CC 2019}"
+    local wine_prefix="${WINE_PREFIX:-$SCR_PATH/prefix}"
+    local user="${USER:-$(id -un)}"
+    
+    # Convert version to preferences path format
+    if [[ "$version" =~ "CC 2019" ]]; then
+        echo "$wine_prefix/drive_c/users/$user/AppData/Roaming/Adobe/Adobe Photoshop CC 2019"
+    elif [[ "$version" =~ "2021" ]]; then
+        echo "$wine_prefix/drive_c/users/$user/AppData/Roaming/Adobe/Adobe Photoshop 2021"
+    elif [[ "$version" =~ "2022" ]]; then
+        echo "$wine_prefix/drive_c/users/$user/AppData/Roaming/Adobe/Adobe Photoshop 2022"
+    else
+        # Fallback to CC 2019 path
+        echo "$wine_prefix/drive_c/users/$user/AppData/Roaming/Adobe/Adobe Photoshop CC 2019"
+    fi
+}
+
 function main() {
+    # KRITISCH: Trap für STRG+C (INT) und andere Signale
+    trap 'echo ""; echo "Installation abgebrochen durch Benutzer (STRG+C)"; log_error "Installation abgebrochen durch Benutzer (STRG+C)"; exit 130' INT TERM HUP
+    
     # Enable comprehensive logging - ALL output will be logged automatically
     setup_comprehensive_logging
+    
+    # KRITISCH: PS_VERSION früh setzen, bevor es verwendet wird
+    # Wird später in install_photoshopSE() nochmal gesetzt, aber hier für main() benötigt
+    PS_VERSION=$(detect_photoshop_version)
+    PS_INSTALL_PATH=$(get_photoshop_install_path "$PS_VERSION")
+    PS_PREFS_PATH=$(get_photoshop_prefs_path "$PS_VERSION")
     
     # Start logging immediately with comprehensive system info
     # Write header to log file (not to console)
@@ -1379,110 +1508,40 @@ function main() {
     log "$MSG_SET_WIN10"
     
     # Für alle Versionen verwende Windows 10 (beste Kompatibilität)
-    if [[ "$PS_VERSION" =~ "2021" ]] || [[ "$PS_VERSION" =~ "2022" ]]; then
-        log "  → Verwende Windows 10 (empfohlen für $PS_VERSION)"
+    # KRITISCH: PS_VERSION mit ${PS_VERSION:-} schützen (kann noch nicht gesetzt sein)
+    if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
+        log "  → Verwende Windows 10 (empfohlen für ${PS_VERSION:-unknown})"
     else
-        log "  → Verwende Windows 10 (auch für $PS_VERSION kompatibel)"
+        log "  → Verwende Windows 10 (auch für ${PS_VERSION:-unknown} kompatibel)"
     fi
     winetricks -q win10 2>&1 | tee -a "$LOG_FILE"
     
     # Core-Komponenten: VC++ Runtimes installieren
-    # PRIORITÄT 1: allredist verwenden (schneller, zuverlässiger) - DIREKT INTEGRIERT
-    # PRIORITÄT 2: winetricks als Fallback
+    # Verwende winetricks (Standard-Methode, bewährt und zuverlässig)
     show_message "$MSG_VCRUN"
     log "$MSG_VCRUN"
     
-    local use_allredist=0
-    local allredist_path=""
+    # Installiere VC++ Runtimes mit winetricks (Standard-Methode, bewährt und zuverlässig)
+    # Standard: Verwende winetricks für VC++ Runtimes (bewährt und zuverlässig)
+    log "  → Installiere VC++ Runtimes mit winetricks (Standard-Methode)..."
+    echo "  → Installiere VC++ Runtimes mit winetricks (dies kann einige Minuten dauern)..."
     
-    # Suche allredist in verschiedenen möglichen Pfaden (universell für alle Linux-Distributionen)
-    # PRIORITÄT 1: Im Projekt-Verzeichnis (direkt mitgeliefert)
-    # PRIORITÄT 2: Andere mögliche Pfade
-    # KRITISCH: Umgebungsvariablen-Validierung - prüfe dass $HOME sicher ist
-    local possible_allredist_paths=(
-        "$PROJECT_ROOT/allredist"
-        "$PROJECT_ROOT/../allredist"
-    )
-    # Füge HOME-Pfade nur hinzu wenn $HOME sicher ist
-    if [ -n "$HOME" ] && [ "$HOME" != "/" ] && [ "$HOME" != "/root" ]; then
-        possible_allredist_paths+=(
-            "$HOME/Downloads/allredist"
-            "$HOME/allredist"
-        )
-    fi
-    possible_allredist_paths+=(
-        "/opt/allredist"
-        "/usr/local/share/allredist"
-    )
+    # KRITISCH: winetricks Output in temporäre Datei (verhindert Blocking)
+    local winetricks_output_file
+    winetricks_output_file=$(mktemp) || winetricks_output_file="/tmp/winetricks_output_$$.log"
     
-    for path in "${possible_allredist_paths[@]}"; do
-        if [ -d "$path/redist" ]; then
-            allredist_path="$path"
-            break
-        fi
-    done
-    
-    # Installiere aus allredist wenn gefunden
-    if [ -n "$allredist_path" ] && [ -d "$allredist_path/redist" ]; then
-        log "✓ allredist-Verzeichnis gefunden: $allredist_path"
-        log "  → Verwende lokale VC++ Redistributables (schneller und zuverlässiger als winetricks)"
-        echo "✓ Verwende lokale VC++ Redistributables aus allredist"
-        use_allredist=1
-        
-        # Installiere VC++ Runtimes aus allredist
-        local vc_versions=("2010" "2012" "2013" "2019")
-        local installed_count=0
-        
-        for vc_ver in "${vc_versions[@]}"; do
-            if [ -d "$allredist_path/redist/$vc_ver" ]; then
-                local vc_x64="$allredist_path/redist/$vc_ver/vcredist_x64.exe"
-                local vc_x86="$allredist_path/redist/$vc_ver/vcredist_x86.exe"
-                
-                if [ -f "$vc_x64" ]; then
-                    log "  → Installiere VC++ $vc_ver (x64)..."
-                    wine "$vc_x64" /quiet /norestart 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-                    ((installed_count++))
-                fi
-                if [ -f "$vc_x86" ]; then
-                    log "  → Installiere VC++ $vc_ver (x86)..."
-                    wine "$vc_x86" /quiet /norestart 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-                    ((installed_count++))
-                fi
-            fi
-        done
-        
-        # Für 2019: Prüfe auch VC_redist.x64.exe Format
-        if [ -f "$allredist_path/redist/2019/VC_redist.x64.exe" ]; then
-            log "  → Installiere VC++ 2019 (VC_redist.x64.exe)..."
-            wine "$allredist_path/redist/2019/VC_redist.x64.exe" /quiet /norestart 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-            ((installed_count++))
-        fi
-        if [ -f "$allredist_path/redist/2019/VC_redist.x86.exe" ]; then
-            log "  → Installiere VC++ 2019 (VC_redist.x86.exe)..."
-            wine "$allredist_path/redist/2019/VC_redist.x86.exe" /quiet /norestart 2>&1 | tee -a "$LOG_FILE" >/dev/null || true
-            ((installed_count++))
-        fi
-        
-        if [ $installed_count -gt 0 ]; then
-            log "✓ $installed_count VC++ Redistributables aus allredist installiert"
-            echo "✓ $installed_count VC++ Redistributables installiert"
-        else
-            log "⚠ allredist gefunden, aber keine VC++ Installer gefunden"
-            use_allredist=0
-        fi
+    if winetricks -q vcrun2010 vcrun2012 vcrun2013 vcrun2015 > "$winetricks_output_file" 2>&1; then
+        cat "$winetricks_output_file" >> "$LOG_FILE"
+        log "  ✓ winetricks VC++ Installation erfolgreich"
+        echo "  ✓ VC++ Runtimes erfolgreich installiert"
+    else
+        local winetricks_exit_code=$?
+        cat "$winetricks_output_file" >> "$LOG_FILE"
+        log "  ⚠ winetricks VC++ Installation fehlgeschlagen (Exit-Code: $winetricks_exit_code)"
+        echo "  ⚠ winetricks VC++ Installation fehlgeschlagen - Installation kann trotzdem funktionieren"
     fi
     
-    # Fallback: Verwende winetricks wenn allredist nicht verfügbar oder fehlgeschlagen
-    if [ $use_allredist -eq 0 ]; then
-        if [ -z "$allredist_path" ]; then
-            log "  → allredist nicht gefunden, verwende winetricks..."
-            echo "  → allredist nicht gefunden, verwende winetricks (kann länger dauern)..."
-        else
-            log "  → allredist-Installation fehlgeschlagen, verwende winetricks..."
-            echo "  → allredist-Installation fehlgeschlagen, verwende winetricks..."
-        fi
-        winetricks -q vcrun2010 vcrun2012 vcrun2013 vcrun2015 2>&1 | tee -a "$LOG_FILE"
-    fi
+    rm -f "$winetricks_output_file" 2>/dev/null || true
     
     show_message "$MSG_FONTS"
     log "$MSG_FONTS"
@@ -1493,14 +1552,13 @@ function main() {
     winetricks -q msxml3 msxml6 gdiplus 2>&1 | tee -a "$LOG_FILE"
     
     # OPTIMIERUNG: Für neuere Versionen (2021+) zusätzliche Komponenten
-    if [[ "$PS_VERSION" =~ "2021" ]] || [[ "$PS_VERSION" =~ "2022" ]]; then
-        log "  → Installiere zusätzliche Komponenten für $PS_VERSION..."
+    # KRITISCH: PS_VERSION mit ${PS_VERSION:-} schützen
+    if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
+        log "  → Installiere zusätzliche Komponenten für ${PS_VERSION:-unknown}..."
         # dotnet48 wird für neuere Photoshop-Versionen benötigt
         winetricks -q dotnet48 2>&1 | tee -a "$LOG_FILE" || log "  ⚠ dotnet48 Installation fehlgeschlagen (optional)"
-        # vcrun2019 für neuere Versionen
-        if [ $use_allredist -eq 0 ]; then
-            winetricks -q vcrun2019 2>&1 | tee -a "$LOG_FILE" || log "  ⚠ vcrun2019 Installation fehlgeschlagen (optional)"
-        fi
+        # vcrun2019 für neuere Versionen (optional)
+        winetricks -q vcrun2019 2>&1 | tee -a "$LOG_FILE" || log "  ⚠ vcrun2019 Installation fehlgeschlagen (optional)"
     fi
     
     # Workaround für bekannte Wine-Probleme (GitHub Issue #34)

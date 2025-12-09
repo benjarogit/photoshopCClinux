@@ -15,13 +15,18 @@
 #               https://github.com/Gictorbit/photoshopCClinux
 ################################################################################
 
+# KRITISCH: LANG_CODE VOR sharedFuncs.sh initialisieren (sharedFuncs.sh aktiviert set -u)
+# Initialize LANG_CODE (will be set by detect_language if not already set)
+LANG_CODE="${LANG_CODE:-}"
+
 # KRITISCH: Source-Hijacking verhindern - immer absoluten Pfad verwenden
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/sharedFuncs.sh"
 
 # Detect language (same as setup.sh)
 detect_language() {
-    if [ -z "$LANG_CODE" ]; then
+    # Skip detection if LANG_CODE is already set (e.g., by manual toggle)
+    if [ -z "${LANG_CODE:-}" ]; then
         if [[ "$LANG" =~ ^de ]]; then
             LANG_CODE="de"
         else
@@ -245,6 +250,10 @@ function ask_question() {
 
 # Load paths with skip_validation=true to allow uninstall even if directories are deleted
 load_paths "true"
+
+# Detect language before main() is called
+detect_language
+
 main
 
 
