@@ -16,12 +16,12 @@
 #               https://github.com/Gictorbit/photoshopCClinux
 ################################################################################
 
-# KRITISCH: Robuste Fehlerbehandlung aktivieren
+# CRITICAL: Enable robust error handling
 set -eu
 (set -o pipefail 2>/dev/null) || true
 
-# KRITISCH: Trap für STRG+C (INT) und andere Signale - MUSS ganz am Anfang gesetzt werden
-# Wird auch in Unterprozessen benötigt (winetricks, wine, etc.)
+# CRITICAL: Trap for CTRL+C (INT) and other signals - MUST be set at the very beginning
+# Also needed in subprocesses (winetricks, wine, etc.)
 cleanup_on_interrupt() {
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
@@ -35,7 +35,7 @@ cleanup_on_interrupt() {
 }
 trap cleanup_on_interrupt INT TERM HUP
 
-# Locale/UTF-8 für DE/EN sicherstellen (mit Prüfung auf existierende Locale)
+# Locale/UTF-8 for DE/EN (with check for existing locale)
 # CRITICAL: Check if locale exists (Alpine often only has C.UTF-8)
 if command -v locale >/dev/null 2>&1; then
     if locale -a 2>/dev/null | grep -qE "^(de_DE|de_DE\.utf8|de_DE\.UTF-8)$"; then
@@ -130,12 +130,12 @@ log_input() {
 read_with_log() {
     local prompt="$1"
     local var_name="$2"
-    # KRITISCH: IFS zurücksetzen nach read
+    # CRITICAL: Reset IFS after read
     local old_IFS="${IFS:-}"
     log_prompt "$prompt"
     IFS= read -r -p "$prompt" "$var_name"
     log_input "${!var_name}"
-    # KRITISCH: IFS zurücksetzen
+    # CRITICAL: Reset IFS
     IFS="$old_IFS"
 }
 
@@ -617,14 +617,14 @@ select_wine_version() {
                             local download_url="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${latest_version}/${latest_version}.tar.gz"
                             local download_file="$install_base/${latest_version}.tar.gz"
                             
-                            # KRITISCH: Download-URL-Validierung - verhindere bösartige URLs
-                            # Prüfe dass URL mit https:// beginnt (HTTPS-Erzwingung)
+                            # CRITICAL: Download URL validation - prevent malicious URLs
+                            # Check that URL starts with https:// (HTTPS enforcement)
                             if [[ ! "$download_url" =~ ^https:// ]]; then
-                                log_error "Download-URL muss HTTPS verwenden (Sicherheitsrisiko): $download_url"
+                                log_error "Download URL must use HTTPS (security risk): $download_url"
                                 download_ok=0
-                            # Prüfe dass URL von github.com stammt
+                            # Check that URL is from github.com
                             elif [[ ! "$download_url" =~ ^https://(www\.)?github\.com ]]; then
-                                log_error "Download-URL von nicht erlaubter Domain (Sicherheitsrisiko): $download_url"
+                                log_error "Download URL from unauthorized domain (security risk): $download_url"
                                 download_ok=0
                             else
                                 log "  → Download von: $download_url"
@@ -1135,7 +1135,7 @@ select_wine_version() {
             if [ -n "$proton_ge_pkg_path" ] && [ -d "$proton_ge_pkg_path" ] && [ -f "$proton_ge_pkg_path/files/bin/wine" ]; then
                 # Only use if NOT in Steam directory (Steam paths start Steam)
                 if [[ ! "$proton_ge_pkg_path" =~ steam ]]; then
-                    # KRITISCH: Validierung dass Pfad sicher ist
+                    # CRITICAL: Validate that path is safe
                     if [[ ! "$proton_ge_pkg_path" =~ ^/tmp|^/var/tmp|^/dev/shm|^/proc ]]; then
                         proton_ge_path="$proton_ge_pkg_path"
                         log_debug "Proton GE (AUR-Paket) gefunden: $proton_ge_path"
@@ -1154,22 +1154,22 @@ select_wine_version() {
         fi
         
         if [ -n "$proton_ge_path" ] && [ -f "$proton_ge_path/files/bin/wine" ]; then
-            # KRITISCH: PATH-Manipulation verhindern - validiere proton_ge_path
-            # Prüfe dass Pfad nicht in unsicheren Verzeichnissen ist
+            # CRITICAL: Prevent PATH manipulation - validate proton_ge_path
+            # Check that path is not in unsafe directories
             if [[ "$proton_ge_path" =~ ^/tmp|^/var/tmp|^/dev/shm|^/proc ]]; then
-                log_error "Proton GE Pfad ist in unsicherem Verzeichnis (Sicherheitsrisiko): $proton_ge_path"
-                log "Verwende Standard-Wine statt unsicherem Proton GE Pfad"
+                log_error "Proton GE path is in unsafe directory (security risk): $proton_ge_path"
+                log "Using standard Wine instead of unsafe Proton GE path"
                 proton_ge_path=""
             else
-                # KRITISCH: Zusätzliche Validierung - prüfe dass wine-Binary echt ist
+                # CRITICAL: Additional validation - check that wine binary is real
                 if [ ! -x "$proton_ge_path/files/bin/wine" ] || [ -L "$proton_ge_path/files/bin/wine" ]; then
-                    log_error "Proton GE wine-Binary ist nicht sicher (Symlink oder nicht ausführbar): $proton_ge_path/files/bin/wine"
-                    log "Verwende Standard-Wine statt unsicherem Proton GE"
+                    log_error "Proton GE wine binary is not safe (symlink or not executable): $proton_ge_path/files/bin/wine"
+                    log "Using standard Wine instead of unsafe Proton GE"
                     proton_ge_path=""
                 else
-                    # KRITISCH: PATH erweitern, aber sicherstellen dass kein . im PATH ist
+                    # CRITICAL: Extend PATH, but ensure no . in PATH
                     local safe_path="$proton_ge_path/files/bin"
-                    # Entferne . aus PATH falls vorhanden
+                    # Remove . from PATH if present
                     local clean_path=$(echo "$PATH" | tr ':' '\n' | grep -v '^\.$' | grep -v '^$' | tr '\n' ':' | sed 's/:$//')
                     export PATH="$safe_path:${clean_path:-/usr/local/bin:/usr/bin:/bin}"
                     export PROTON_PATH="$proton_ge_path"
@@ -1365,14 +1365,14 @@ get_photoshop_prefs_path() {
 }
 
 function main() {
-    # KRITISCH: Trap für STRG+C (INT) und andere Signale
+    # CRITICAL: Trap for CTRL+C (INT) and other signals
     trap 'echo ""; echo "Installation abgebrochen durch Benutzer (STRG+C)"; log_error "Installation abgebrochen durch Benutzer (STRG+C)"; exit 130' INT TERM HUP
     
     # Enable comprehensive logging - ALL output will be logged automatically
     setup_comprehensive_logging
     
-    # KRITISCH: PS_VERSION früh setzen, bevor es verwendet wird
-    # Wird später in install_photoshopSE() nochmal gesetzt, aber hier für main() benötigt
+    # CRITICAL: Set PS_VERSION early, before it's used
+    # Will be set again later in install_photoshopSE(), but needed here for main()
     PS_VERSION=$(detect_photoshop_version)
     PS_INSTALL_PATH=$(get_photoshop_install_path "$PS_VERSION")
     PS_PREFS_PATH=$(get_photoshop_prefs_path "$PS_VERSION")
@@ -1496,8 +1496,8 @@ function main() {
     #create resources directory 
     rmdir_if_exist $RESOURCES_PATH
 
-    # Installiere Wine-Komponenten
-    # Basierend auf GitHub Issues #23, #45, #67: Minimale, stabile Komponenten
+    # Install Wine components
+    # Based on GitHub Issues #23, #45, #67: Minimal, stable components
     show_message "$MSG_INSTALL_COMPONENTS"
     show_message "\033[1;33m$MSG_WAIT\e[0m"
     
@@ -1515,16 +1515,16 @@ function main() {
     fi
     winetricks -q win10 >> "$LOG_FILE" 2>&1
     
-    # Core-Komponenten: VC++ Runtimes installieren
-    # Verwende winetricks (Standard-Methode, bewährt und zuverlässig)
+    # Core components: Install VC++ Runtimes
+    # Use winetricks (standard method, proven and reliable)
     log "$MSG_VCRUN"
     
-    # Installiere VC++ Runtimes mit winetricks (Standard-Methode, bewährt und zuverlässig)
-    # Standard: Verwende winetricks für VC++ Runtimes (bewährt und zuverlässig)
+    # Install VC++ Runtimes with winetricks (standard method, proven and reliable)
+    # Standard: Use winetricks for VC++ Runtimes (proven and reliable)
     log "  → Installiere VC++ Runtimes mit winetricks (Standard-Methode)..."
     echo "  → Installiere VC++ Runtimes mit winetricks (dies kann einige Minuten dauern)..."
     
-    # KRITISCH: winetricks Output in temporäre Datei (verhindert Blocking)
+    # CRITICAL: winetricks output to temporary file (prevents blocking)
     local winetricks_output_file
     winetricks_output_file=$(mktemp) || winetricks_output_file="/tmp/winetricks_output_$$.log"
     
@@ -1547,8 +1547,8 @@ function main() {
     log "$MSG_XML"
     winetricks -q msxml3 msxml6 gdiplus >> "$LOG_FILE" 2>&1
     
-    # OPTIMIERUNG: Für neuere Versionen (2021+) zusätzliche Komponenten
-    # KRITISCH: PS_VERSION mit ${PS_VERSION:-} schützen
+    # OPTIMIZATION: For newer versions (2021+) additional components
+    # CRITICAL: Protect PS_VERSION with ${PS_VERSION:-}
     if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
         log "  → Installiere zusätzliche Komponenten für ${PS_VERSION:-unknown}..."
         # dotnet48 wird für neuere Photoshop-Versionen benötigt
@@ -1583,8 +1583,8 @@ function main() {
     wine reg add "HKEY_CURRENT_USER\\Control Panel\\Desktop" /v LogPixels /t REG_DWORD /d 96 /f >> "$LOG_FILE" 2>&1 || true
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Fonts" /v Smoothing /t REG_DWORD /d 2 /f >> "$LOG_FILE" 2>&1 || true
     
-    # KRITISCH: Windows-Version nochmal explizit auf Windows 10 setzen
-    # (winetricks-Installationen können die Version zurücksetzen, besonders IE8)
+    # CRITICAL: Set Windows version explicitly to Windows 10 again
+    # (winetricks installations can reset the version, especially IE8)
     log "  → Stelle sicher, dass Windows-Version auf Windows 10 gesetzt ist (vor Adobe Installer)..."
     winetricks -q win10 >> "$LOG_FILE" 2>&1 || log "  ⚠ win10 konnte nicht gesetzt werden"
     
@@ -1597,9 +1597,9 @@ function main() {
 
     if [ -d $RESOURCES_PATH ];then
         log "deleting resources folder"
-        # KRITISCH: Sichere rm -rf mit Validierung
+        # CRITICAL: Safe rm -rf with validation
         if [ -z "$RESOURCES_PATH" ]; then
-            log_error "RESOURCES_PATH ist leer - überspringe Löschung"
+            log_error "RESOURCES_PATH is empty - skipping deletion"
         elif [ "$RESOURCES_PATH" = "/" ]; then
             log_error "RESOURCES_PATH ist root - überspringe Löschung (Sicherheit)"
         elif [ ! -e "$RESOURCES_PATH" ]; then
@@ -1731,7 +1731,7 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     
     if winetricks -q ie8 >> "$LOG_FILE" 2>&1; then
         log "  ✓ IE8 erfolgreich installiert"
-        # KRITISCH: IE8 setzt Windows-Version auf win7 zurück - muss wieder auf win10 gesetzt werden!
+        # CRITICAL: IE8 resets Windows version to win7 - must be set back to win10!
         log "  → Setze Windows-Version erneut auf Windows 10 (IE8 hat sie auf win7 zurückgesetzt)..."
         winetricks -q win10 >> "$LOG_FILE" 2>&1 || log "  ⚠ win10 konnte nicht erneut gesetzt werden"
         log "  ✓ Windows 10 erneut gesetzt"
@@ -1744,7 +1744,7 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     log "     (Best Practice: native,builtin für maximale Kompatibilität)"
     
     # Best Practice: native,builtin (versuche native zuerst, dann builtin als Fallback)
-    # Für kritische IE-Komponenten verwenden wir native,builtin
+    # For critical IE components we use native,builtin
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v mshtml /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v jscript /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v vbscript /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || true

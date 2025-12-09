@@ -57,7 +57,7 @@ fi
 RESOURCES_PATH="$SCR_PATH/resources"
 WINE_PREFIX="$SCR_PATH/prefix"
 
-# KRITISCH: WINEPREFIX-Validierung - verhindere Manipulation
+# CRITICAL: WINEPREFIX validation - prevent manipulation
 if [[ "$WINE_PREFIX" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
     echo "ERROR: WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX" >&2
     exit 1

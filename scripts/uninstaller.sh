@@ -15,11 +15,11 @@
 #               https://github.com/Gictorbit/photoshopCClinux
 ################################################################################
 
-# KRITISCH: LANG_CODE VOR sharedFuncs.sh initialisieren (sharedFuncs.sh aktiviert set -u)
+# CRITICAL: Initialize LANG_CODE BEFORE sharedFuncs.sh (sharedFuncs.sh enables set -u)
 # Initialize LANG_CODE (will be set by detect_language if not already set)
 LANG_CODE="${LANG_CODE:-}"
 
-# KRITISCH: Source-Hijacking verhindern - immer absoluten Pfad verwenden
+# CRITICAL: Prevent source hijacking - always use absolute path
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/sharedFuncs.sh"
 
@@ -245,9 +245,9 @@ main() {
 #parameters [Message] [default flag [Y/N]]
 function ask_question() {
     result=""
-    # KRITISCH: == ist nicht POSIX, verwende =
+    # CRITICAL: == is not POSIX, use =
     if [ "$2" = "Y" ];then
-        # KRITISCH: IFS zurücksetzen nach read
+        # CRITICAL: Reset IFS after read
         local old_IFS="${IFS:-}"
         IFS= read -r -p "$1 [Y/n] " response
         if locale noexpr >/dev/null 2>&1 && [[ "$response" =~ $(locale noexpr) ]];then
@@ -257,10 +257,10 @@ function ask_question() {
         else
             result="yes"
         fi
-        # KRITISCH: IFS zurücksetzen
+        # CRITICAL: Reset IFS
         IFS="$old_IFS"
     elif [ "$2" = "N" ];then
-        # KRITISCH: IFS zurücksetzen nach read
+        # CRITICAL: Reset IFS after read
         local old_IFS="${IFS:-}"
         IFS= read -r -p "$1 [N/y] " response
         if locale yesexpr >/dev/null 2>&1 && [[ "$response" =~ $(locale yesexpr) ]];then
@@ -270,7 +270,7 @@ function ask_question() {
         else
             result="no"
         fi
-        # KRITISCH: IFS zurücksetzen
+        # CRITICAL: Reset IFS
         IFS="$old_IFS"
     fi
 }

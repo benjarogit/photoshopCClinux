@@ -217,16 +217,16 @@ function launcher() {
     
     #create launcher script
     # KRITISCH: SCRIPT_DIR sollte von aufrufendem Script exportiert werden
-    # Fallback: Versuche es selbst zu ermitteln
-    if [ -z "${SCRIPT_DIR:-}" ]; then
-        # Versuche über BASH_SOURCE (wenn von PhotoshopSetup.sh aufgerufen)
+        # Fallback: Try to determine it ourselves
+        if [ -z "${SCRIPT_DIR:-}" ]; then
+        # Try via BASH_SOURCE (if called from PhotoshopSetup.sh)
         local caller_script="${BASH_SOURCE[1]:-}"
         if [ -n "$caller_script" ] && [ -f "$caller_script" ]; then
             SCRIPT_DIR="$(cd "$(dirname "$caller_script")" && pwd)" 2>/dev/null || true
         fi
-        # Letzter Fallback: Versuche scripts/ Verzeichnis relativ zu SCR_PATH zu finden
+        # Last fallback: Try to find scripts/ directory relative to SCR_PATH
         if [ -z "${SCRIPT_DIR:-}" ] && [ -n "${SCR_PATH:-}" ]; then
-            # SCR_PATH ist normalerweise ~/.photoshopCCV19, Projekt ist ein Verzeichnis darüber
+            # SCR_PATH is usually ~/.photoshopCCV19, project is one directory up
             local possible_script_dir="$(dirname "$(dirname "$SCR_PATH")")/scripts" 2>/dev/null || true
             if [ -d "$possible_script_dir" ] && [ -f "$possible_script_dir/launcher.sh" ]; then
                 SCRIPT_DIR="$possible_script_dir"
@@ -301,7 +301,7 @@ function launcher() {
                 return 1
             fi
             # KRITISCH: Cleanup bei allen Signalen (nicht nur EXIT) - verhindere Race-Conditions
-            # Verwende Funktion statt String für trap (sicherer)
+            # Use function instead of string for trap (safer)
             trap "rm -f '$tmp_file' 2>/dev/null || true" EXIT INT TERM HUP
             # KRITISCH: Escaping für sed
             local escaped_path
@@ -382,7 +382,7 @@ function launcher() {
                 }
                 # CRITICAL: install instead of mv (atomic on many filesystems)
                 install -m "$(stat -c '%a' "$file" 2>/dev/null || echo 644)" "$tmp_file" "$file" 2>/dev/null || {
-                    # Fallback zu mv mit Prüfung
+                    # Fallback to mv with check
                     if [ -f "$tmp_file" ] && [ ! -L "$tmp_file" ]; then
                         mv "$tmp_file" "$file" || {
                             rm -f "$tmp_file"
@@ -555,13 +555,13 @@ function download_component() {
         "adobe.com"
     )
     
-    # Prüfe dass URL mit https:// beginnt (HTTPS-Erzwingung)
+    # Check that URL starts with https:// (HTTPS enforcement)
     if [[ ! "$url" =~ ^https:// ]]; then
         error "Download URL must use HTTPS (security risk): $url"
         return 1
     fi
     
-    # Prüfe dass URL von erlaubter Domain stammt
+    # Check that URL is from allowed domain
     local url_domain=$(echo "$url" | sed -E 's|^https?://([^/]+).*|\1|' | sed 's|^www\.||')
     local domain_allowed=0
     for domain in "${allowed_domains[@]}"; do
@@ -715,13 +715,13 @@ function is64() {
 function ask_question() {
     question_result=""
     # KRITISCH: == ist nicht POSIX, verwende =
-    # KRITISCH: read -r mit IFS= für Whitespace-Sicherheit
-    # KRITISCH: IFS zurücksetzen nach read
+    # CRITICAL: read -r with IFS= for whitespace safety
+    # CRITICAL: Reset IFS after read
     # KRITISCH: $2 ist optional, daher ${2:-} verwenden
     local old_IFS="${IFS:-}"
     if [ "${2:-}" = "Y" ];then
         IFS= read -r -p "$1 [Y/n] " response
-        # KRITISCH: locale yesexpr/noexpr kann fehlen, Fallback
+        # CRITICAL: locale yesexpr/noexpr may be missing, fallback
         if locale noexpr >/dev/null 2>&1 && [[ "$response" =~ $(locale noexpr) ]];then
             question_result="no"
         elif [ -n "$response" ] && [[ "$response" =~ ^[Nn] ]]; then
@@ -739,7 +739,7 @@ function ask_question() {
             question_result="no"
         fi
     fi
-    # KRITISCH: IFS zurücksetzen
+    # CRITICAL: Reset IFS
     IFS="$old_IFS"
 }
 
@@ -748,8 +748,8 @@ function usage() {
 }
 
 function save_paths() {
-    # KRITISCH: Validierung BEVOR Speicherung - verhindere Privilege-Escalation
-    # Prüfe dass Pfade nicht auf System-Verzeichnisse zeigen
+    # CRITICAL: Validation BEFORE saving - prevent privilege escalation
+    # Check that paths do not point to system directories
     if [[ "$SCR_PATH" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
         error "SCR_PATH zeigt auf System-Verzeichnis (Sicherheitsrisiko): $SCR_PATH"
         return 1
@@ -834,8 +834,8 @@ function load_paths() {
         fi
     fi
     
-    # KRITISCH: Pfad-Sicherheitsprüfung - verhindere Privilege-Escalation
-    # Prüfe dass Pfade nicht auf System-Verzeichnisse zeigen
+    # CRITICAL: Path security check - prevent privilege escalation
+    # Check that paths do not point to system directories
     if [[ "$SCR_PATH" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
         echo "ERROR: SCR_PATH zeigt auf System-Verzeichnis (Sicherheitsrisiko): $SCR_PATH"
         if [ "$skip_validation" = "false" ]; then
@@ -852,7 +852,7 @@ function load_paths() {
         fi
     fi
     
-    # Prüfe dass SCR_PATH wirklich ein Verzeichnis ist (nicht Datei)
+    # Check that SCR_PATH is really a directory (not a file)
     if [ "$skip_validation" = "false" ]; then
         if [ ! -d "$SCR_PATH" ]; then
             echo "ERROR: Installation directory does not exist or is not a directory: $SCR_PATH"
