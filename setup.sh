@@ -46,6 +46,30 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Initialize LANG_CODE (will be set by detect_language if not already set)
 LANG_CODE="${LANG_CODE:-}"
 
+# ANSI Color codes (initialize globally for use throughout script)
+# CRITICAL: Must be initialized before any function uses them
+if [ -t 1 ] && [ "$TERM" != "dumb" ]; then
+    C_RESET="\033[0m"
+    C_CYAN="\033[0;36;1m"
+    C_MAGENTA="\033[0;35;1m"
+    C_BLUE="\033[0;34;1m"
+    C_YELLOW="\033[0;33;1m"
+    C_WHITE="\033[0;37;1m"
+    C_GREEN="\033[0;32;1m"
+    C_GRAY="\033[0;37m"
+    C_RED="\033[1;31m"
+else
+    C_RESET=""
+    C_CYAN=""
+    C_MAGENTA=""
+    C_BLUE=""
+    C_YELLOW=""
+    C_WHITE=""
+    C_GREEN=""
+    C_GRAY=""
+    C_RED=""
+fi
+
 # Detect system language (only if not already set by user)
 detect_language() {
     # Skip detection if LANG_CODE is already set (e.g., by manual toggle)
@@ -162,26 +186,7 @@ msg_banner_not_found() {
 function show_wine_selection_menu() {
     clear && echo ""
     
-    # ANSI Color codes (same as banner)
-    if [ -t 1 ] && [ "$TERM" != "dumb" ]; then
-        local C_RESET="\033[0m"
-        local C_CYAN="\033[0;36;1m"
-        local C_MAGENTA="\033[0;35;1m"
-        local C_BLUE="\033[0;34;1m"
-        local C_YELLOW="\033[0;33;1m"
-        local C_WHITE="\033[0;37;1m"
-        local C_GREEN="\033[0;32;1m"
-        local C_GRAY="\033[0;37m"
-    else
-        local C_RESET=""
-        local C_CYAN=""
-        local C_MAGENTA=""
-        local C_BLUE=""
-        local C_YELLOW=""
-        local C_WHITE=""
-        local C_GREEN=""
-        local C_GRAY=""
-    fi
+    # ANSI Color codes are now global (defined at script start)
     
     if [ "$LANG_CODE" = "de" ]; then
         echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
@@ -547,27 +552,7 @@ function banner() {
     clear && echo ""
     
     # Check if terminal supports colors (fallback for dumb terminals)
-    if [ -t 1 ] && [ "$TERM" != "dumb" ]; then
-        # ANSI Color codes (using \033 for maximum compatibility)
-        local C_RESET="\033[0m"
-        local C_CYAN="\033[0;36;1m"
-        local C_MAGENTA="\033[0;35;1m"
-        local C_BLUE="\033[0;34;1m"
-        local C_YELLOW="\033[0;33;1m"
-        local C_WHITE="\033[0;37;1m"
-        local C_GREEN="\033[0;32;1m"
-        local C_GRAY="\033[0;37m"
-    else
-        # No colors for dumb terminals
-        local C_RESET=""
-        local C_CYAN=""
-        local C_MAGENTA=""
-        local C_BLUE=""
-        local C_YELLOW=""
-        local C_WHITE=""
-        local C_GREEN=""
-        local C_GRAY=""
-    fi
+    # ANSI Color codes are now global (defined at script start)
     
     # Get system information
     local sys_info=$(get_system_info)
@@ -606,7 +591,7 @@ function banner() {
         local opt9="9- Beenden"
         local sys_label="System:"
     else
-        local opt1="1- Install photoshop CC"
+        local opt1="1- Install Photoshop"
         local opt2="2- Install camera raw v12"
         local opt3="3- Pre-installation check          (recommended)"
         local opt4="4- Troubleshooting                 (Fix issues)"
@@ -665,7 +650,7 @@ function banner() {
     sys_info_line="${sys_info_line}$(printf '%*s' $sys_padding '')"
     
     # Print colored banner with echo -e (bash/sh compatible)
-    echo -e "${C_CYAN}                     ┏━━━━━━━━━━━━━━━━━━━━━━━━━┫ ${C_MAGENTA}Photoshop Installer${C_CYAN} ┣━━━━━━━━━━━━━━━━━━━━━━━━┓${C_RESET}"
+    echo -e "${C_CYAN}                     ┏━━━━━━━━━━━━━━━━━━━━━━━━━┫ ${C_MAGENTA}Photoshop Installer${C_CYAN} ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━┓${C_RESET}"
     echo -e "${C_CYAN}                     ┃${C_RESET} ${C_GRAY}${sys_info_line}${C_CYAN}┃${C_RESET}"
     echo -e "${C_CYAN}                     ┃${C_RESET}                                                                           ${C_CYAN}┃${C_RESET}"
     echo -e "${C_BLUE}  ███████████████████████████${C_RESET}                                                                    ${C_CYAN}┃${C_RESET}"
