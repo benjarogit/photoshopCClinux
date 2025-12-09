@@ -38,9 +38,9 @@ detect_language() {
 # Multi-language messages
 msg_uninstall_confirm() {
     if [ "$LANG_CODE" = "de" ]; then
-        echo "Möchtest du Photoshop CC wirklich deinstallieren?"
+        echo -e "${C_YELLOW}⚠${C_RESET} ${C_CYAN}Möchtest du Photoshop wirklich deinstallieren?${C_RESET}"
     else
-        echo "Are you sure you want to uninstall Photoshop CC?"
+        echo -e "${C_YELLOW}⚠${C_RESET} ${C_CYAN}Are you sure you want to uninstall Photoshop?${C_RESET}"
     fi
 }
 
@@ -152,9 +152,9 @@ main() {
     ENTRY_PATH="$HOME/.local/share/applications/photoshop.desktop"
     
     if [ "$LANG_CODE" = "de" ]; then
-        notify-send "Photoshop CC" "Photoshop-Deinstaller gestartet" -i "photoshop" 2>/dev/null || true
+        notify-send "Photoshop" "Photoshop-Deinstaller gestartet" -i "photoshop" 2>/dev/null || true
     else
-        notify-send "Photoshop CC" "Photoshop uninstaller started" -i "photoshop" 2>/dev/null || true
+        notify-send "Photoshop" "Photoshop uninstaller started" -i "photoshop" 2>/dev/null || true
     fi
 
     ask_question "$(msg_uninstall_confirm)" "N"

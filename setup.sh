@@ -69,7 +69,7 @@ msg_choose_option() {
 
 msg_run_photoshop() {
     if [ "$LANG_CODE" = "de" ]; then
-        echo "Starte Photoshop CC Installation..."
+        echo -e "${C_CYAN}→${C_RESET} ${C_MAGENTA}Starte Photoshop Installation...${C_RESET}"
         echo -n "Verwende winetricks für Komponenten-Installation..."
     else
         echo "run photoshop CC Installation..."
@@ -97,7 +97,7 @@ msg_run_winecfg() {
 
 msg_uninstall() {
     if [ "$LANG_CODE" = "de" ]; then
-        echo -n "Deinstalliere Photoshop CC ..."
+        echo -ne "${C_YELLOW}→${C_RESET} ${C_MAGENTA}Deinstalliere Photoshop ...${C_RESET}"
     else
         echo -n "uninstall photoshop CC ..."
     fi
@@ -161,28 +161,48 @@ msg_banner_not_found() {
 
 function show_wine_selection_menu() {
     clear && echo ""
-    if [ "$LANG_CODE" = "de" ]; then
-        echo "═══════════════════════════════════════════════════════════════"
-        echo "            Wine/Proton Auswahl für Photoshop CC"
-        echo "═══════════════════════════════════════════════════════════════"
-        echo ""
-        echo "  [1] Wine Standard installieren"
-        echo "  [2] Proton GE installieren (empfohlen)"
-        echo "  [3] Zurück zum Hauptmenü"
-        echo ""
-        IFS= read -r -p "Wähle eine Option [1-3]: " wine_choice
+    
+    # ANSI Color codes (same as banner)
+    if [ -t 1 ] && [ "$TERM" != "dumb" ]; then
+        local C_RESET="\033[0m"
+        local C_CYAN="\033[0;36;1m"
+        local C_MAGENTA="\033[0;35;1m"
+        local C_BLUE="\033[0;34;1m"
+        local C_YELLOW="\033[0;33;1m"
+        local C_WHITE="\033[0;37;1m"
+        local C_GREEN="\033[0;32;1m"
+        local C_GRAY="\033[0;37m"
     else
-        echo "═══════════════════════════════════════════════════════════════"
-        echo "            Wine/Proton Selection for Photoshop CC"
-        echo "═══════════════════════════════════════════════════════════════"
+        local C_RESET=""
+        local C_CYAN=""
+        local C_MAGENTA=""
+        local C_BLUE=""
+        local C_YELLOW=""
+        local C_WHITE=""
+        local C_GREEN=""
+        local C_GRAY=""
+    fi
+    
+    if [ "$LANG_CODE" = "de" ]; then
+        echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+        echo -e "${C_MAGENTA}            Wine/Proton Auswahl für Photoshop${C_RESET}"
+        echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
         echo ""
-        echo "  Choose a Wine version:"
+        echo -e "  ${C_YELLOW}[1]${C_RESET} ${C_WHITE}Wine Standard installieren${C_RESET}"
+        echo -e "  ${C_YELLOW}[2]${C_RESET} ${C_GREEN}Proton GE installieren (empfohlen)${C_RESET}"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} ${C_WHITE}Zurück zum Hauptmenü${C_RESET}"
         echo ""
-        echo "  [1] Install with Wine Standard"
-        echo "  [2] Install with Proton GE (recommended)"
-        echo "  [3] Back to main menu"
+        IFS= read -r -p "$(echo -e "${C_CYAN}Wähle eine Option [1-3]:${C_RESET} ") " wine_choice
+    else
+        echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+        echo -e "${C_MAGENTA}            Wine/Proton Selection for Photoshop${C_RESET}"
+        echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
         echo ""
-        IFS= read -r -p "Choose an option [1-3]: " wine_choice
+        echo -e "  ${C_YELLOW}[1]${C_RESET} ${C_WHITE}Install with Wine Standard${C_RESET}"
+        echo -e "  ${C_YELLOW}[2]${C_RESET} ${C_GREEN}Install with Proton GE (recommended)${C_RESET}"
+        echo -e "  ${C_YELLOW}[3]${C_RESET} ${C_WHITE}Back to main menu${C_RESET}"
+        echo ""
+        IFS= read -r -p "$(echo -e "${C_CYAN}Choose an option [1-3]:${C_RESET} ") " wine_choice
     fi
     
     case "$wine_choice" in
@@ -575,7 +595,7 @@ function banner() {
     fi
     
     if [ "$LANG_CODE" = "de" ]; then
-        local opt1="1- Photoshop CC installieren"
+        local opt1="1- Photoshop installieren"
         local opt2="2- Camera Raw v12 installieren"
         local opt3="3- System-Vorprüfung               (empfohlen)"
         local opt4="4- Fehlerbehebung                  (Troubleshoot)"
@@ -645,7 +665,7 @@ function banner() {
     sys_info_line="${sys_info_line}$(printf '%*s' $sys_padding '')"
     
     # Print colored banner with echo -e (bash/sh compatible)
-    echo -e "${C_CYAN}                     ┏━━━━━━━━━━━━━━━━━━━━━━━━━┫ ${C_MAGENTA}Photoshop CC Installer${C_CYAN} ┣━━━━━━━━━━━━━━━━━━━━━━━━┓${C_RESET}"
+    echo -e "${C_CYAN}                     ┏━━━━━━━━━━━━━━━━━━━━━━━━━┫ ${C_MAGENTA}Photoshop Installer${C_CYAN} ┣━━━━━━━━━━━━━━━━━━━━━━━━┓${C_RESET}"
     echo -e "${C_CYAN}                     ┃${C_RESET} ${C_GRAY}${sys_info_line}${C_CYAN}┃${C_RESET}"
     echo -e "${C_CYAN}                     ┃${C_RESET}                                                                           ${C_CYAN}┃${C_RESET}"
     echo -e "${C_BLUE}  ███████████████████████████${C_RESET}                                                                    ${C_CYAN}┃${C_RESET}"

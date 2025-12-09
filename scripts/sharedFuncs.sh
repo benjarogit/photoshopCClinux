@@ -38,6 +38,29 @@ else
 fi
 export LC_ALL="${LC_ALL:-$LANG}"
 
+# ANSI Color codes (same as setup.sh and PhotoshopSetup.sh)
+if [ -t 1 ] && [ "$TERM" != "dumb" ]; then
+    C_RESET="\033[0m"
+    C_CYAN="\033[0;36;1m"
+    C_MAGENTA="\033[0;35;1m"
+    C_BLUE="\033[0;34;1m"
+    C_YELLOW="\033[0;33;1m"
+    C_WHITE="\033[0;37;1m"
+    C_GREEN="\033[0;32;1m"
+    C_GRAY="\033[0;37m"
+    C_RED="\033[1;31m"
+else
+    C_RESET=""
+    C_CYAN=""
+    C_MAGENTA=""
+    C_BLUE=""
+    C_YELLOW=""
+    C_WHITE=""
+    C_GREEN=""
+    C_GRAY=""
+    C_RED=""
+fi
+
 #has tow mode [pkgName] [mode=summary]
 function package_installed() {
     # CRITICAL: command -v instead of which (POSIX-compliant, safer)
@@ -58,12 +81,12 @@ function package_installed() {
         fi
     else    
         if [ "$pkginstalled" -eq 0 ];then
-            show_message "package\033[1;36m $1\e[0m is installed..."
+            show_message "${C_GREEN}✓${C_RESET} package ${C_CYAN}$1${C_RESET} is installed..."
         else
-            warning "package\033[1;33m $1\e[0m is not installed.\nplease make sure it's already installed"
+            warning "${C_YELLOW}⚠${C_RESET} package ${C_YELLOW}$1${C_RESET} is not installed.\nplease make sure it's already installed"
             ask_question "would you continue?" "N"
             if [ "$question_result" = "no" ];then
-                echo "exit..."
+                echo -e "${C_RED}exit...${C_RESET}"
                 exit 5
             fi
         fi
@@ -106,37 +129,35 @@ function setup_log() {
 function show_message() {
     local main_log=$(get_main_log)
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local message="$@"
     
-    # Log to main log file if available
+    # Strip ANSI codes for logging (keep only plain text)
+    local plain_message=$(echo "$message" | sed 's/\x1b\[[0-9;]*m//g')
+    
+    # Log to main log file if available (plain text, no colors)
     if [ -n "${main_log:-}" ] && [ -f "${main_log}" ]; then
-        echo "[$timestamp] $@" >> "${main_log}"
+        echo "[$timestamp] $plain_message" >> "${main_log}"
     fi
     
     # Also log to new LOG_FILE if available (from PhotoshopSetup.sh)
     if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
-        echo "[$timestamp] $@" >> "${LOG_FILE}"
+        echo "[$timestamp] $plain_message" >> "${LOG_FILE}"
     fi
     
     # Also log to old setuplog.log for compatibility
     if [ -n "${SCR_PATH:-}" ] && [ -d "${SCR_PATH:-}" ]; then
-        echo -e "$(date) : $@" >> "${SCR_PATH}/setuplog.log" 2>/dev/null || true
+        echo -e "$(date) : $plain_message" >> "${SCR_PATH}/setuplog.log" 2>/dev/null || true
     fi
     
-    echo -e "$@"
-    
-    # Log to main log if available
-    if [ -n "${main_log:-}" ] && [ -f "${main_log}" ]; then
-        echo "[$timestamp] $@" >> "${main_log}"
-    fi
-    
-    # Also log to old location for compatibility
-    setup_log "$@"
+    # Display with colors
+    echo -e "$message"
 }
 
 function error() {
     local main_log=$(get_main_log)
     local error_log=""
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local message="$@"
     
     # Try to find error log
     if [ -n "$ERROR_LOG" ]; then
@@ -145,31 +166,40 @@ function error() {
         error_log=$(ls -t "$PROJECT_ROOT/logs"/*_errors.log 2>/dev/null | head -1 || echo "")
     fi
     
-    echo -e "\033[1;31merror:\e[0m $@"
+    # Strip ANSI codes for logging
+    local plain_message=$(echo "$message" | sed 's/\x1b\[[0-9;]*m//g')
     
-    # Log to main log if available
+    # Display with red color
+    echo -e "${C_RED}✗ ERROR:${C_RESET} ${C_RED}$message${C_RESET}"
+    
+    # Log to main log if available (plain text)
     if [ -n "$main_log" ] && [ -f "$main_log" ]; then
-        echo "[$timestamp] ERROR: $@" >> "$main_log"
+        echo "[$timestamp] ERROR: $plain_message" >> "$main_log"
     fi
     
     # Log to error log if available
     if [ -n "$error_log" ] && [ -f "$error_log" ]; then
-        echo "[$timestamp] ERROR: $@" >> "$error_log"
+        echo "[$timestamp] ERROR: $plain_message" >> "$error_log"
     fi
     
-    setup_log "$@"
+    setup_log "ERROR: $plain_message"
     exit 1
 }
 
 function error2() {
     local main_log=$(get_main_log)
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local message="$@"
     
-    echo -e "\033[1;31merror:\e[0m $@"
+    # Strip ANSI codes for logging
+    local plain_message=$(echo "$message" | sed 's/\x1b\[[0-9;]*m//g')
     
-    # Log to main log if available
+    # Display with red color
+    echo -e "${C_RED}✗ ERROR:${C_RESET} ${C_RED}$message${C_RESET}"
+    
+    # Log to main log if available (plain text)
     if [ -n "$main_log" ] && [ -f "$main_log" ]; then
-        echo "[$timestamp] ERROR: $@" >> "$main_log"
+        echo "[$timestamp] ERROR: $plain_message" >> "$main_log"
     fi
     
     exit 1
@@ -178,26 +208,36 @@ function error2() {
 function warning() {
     local main_log=$(get_main_log)
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local message="$@"
     
-    echo -e "\033[1;33mWarning:\e[0m $@"
+    # Strip ANSI codes for logging
+    local plain_message=$(echo "$message" | sed 's/\x1b\[[0-9;]*m//g')
     
-    # Log to main log if available
+    # Display with yellow color
+    echo -e "${C_YELLOW}⚠ WARNING:${C_RESET} ${C_YELLOW}$message${C_RESET}"
+    
+    # Log to main log if available (plain text)
     if [ -n "$main_log" ] && [ -f "$main_log" ]; then
-        echo "[$timestamp] WARNING: $@" >> "$main_log"
+        echo "[$timestamp] WARNING: $plain_message" >> "$main_log"
     fi
     
-    setup_log "$@"
+    setup_log "WARNING: $plain_message"
 }
 
 function warning2() {
     local main_log=$(get_main_log)
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local message="$@"
     
-    echo -e "\033[1;33mWarning:\e[0m $@"
+    # Strip ANSI codes for logging
+    local plain_message=$(echo "$message" | sed 's/\x1b\[[0-9;]*m//g')
     
-    # Log to main log if available
+    # Display with yellow color
+    echo -e "${C_YELLOW}⚠ WARNING:${C_RESET} ${C_YELLOW}$message${C_RESET}"
+    
+    # Log to main log if available (plain text)
     if [ -n "$main_log" ] && [ -f "$main_log" ]; then
-        echo "[$timestamp] WARNING: $@" >> "$main_log"
+        echo "[$timestamp] WARNING: $plain_message" >> "$main_log"
     fi
 }
 
@@ -247,7 +287,7 @@ function launcher() {
     mkdir -p "$launcher_dest" || error "can't create launcher directory"
 
     if [ -f "$launcher_path" ]; then
-        show_message "launcher.sh detected..."
+        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}launcher.sh${C_RESET} detected..."
         
         cp "$launcher_path" "$launcher_dest" || error "can't copy launcher"
         
@@ -270,11 +310,11 @@ function launcher() {
     local desktop_entry_dest="$HOME/.local/share/applications/photoshop.desktop"
     
     if [ -f "$desktop_entry" ];then
-        show_message "desktop entry detected..."
+        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}desktop entry${C_RESET} detected..."
        
         #delete desktop entry if exists
         if [ -f "$desktop_entry_dest" ];then
-            show_message "desktop entry exist deleted..."
+            show_message "${C_YELLOW}→${C_RESET} ${C_GRAY}desktop entry${C_RESET} exist deleted..."
             rm "$desktop_entry_dest"
         fi
         cp "$desktop_entry" "$desktop_entry_dest" || error "can't copy desktop entry"
@@ -459,11 +499,11 @@ EOF
         if command -v update-mime-database &>/dev/null; then
             update-mime-database "$HOME/.local/share/mime" 2>/dev/null || true
         fi
-        show_message "MIME-Type Registrierung erstellt (PSD/PSB Dateien können mit Photoshop geöffnet werden)"
+        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}MIME-Type Registrierung${C_RESET} erstellt (PSD/PSB Dateien können mit Photoshop geöffnet werden)"
     fi
     
     #create photoshop command
-    show_message "create photoshop command..."
+    show_message "${C_YELLOW}→${C_RESET} ${C_CYAN}create photoshop command...${C_RESET}"
     # CRITICAL: Validation BEFORE sudo operation - prevent privilege escalation
     if [[ "$SCR_PATH" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
         error "SCR_PATH zeigt auf System-Verzeichnis (Sicherheitsrisiko): $SCR_PATH"
@@ -474,15 +514,15 @@ EOF
         return 1
     fi
     if [ -f "/usr/local/bin/photoshop" ];then
-        show_message "photoshop command exist deleted..."
+        show_message "${C_YELLOW}→${C_RESET} ${C_GRAY}photoshop command${C_RESET} exist deleted..."
         sudo rm "/usr/local/bin/photoshop"
     fi
     sudo ln -s "$SCR_PATH/launcher/launcher.sh" "/usr/local/bin/photoshop" || error "can't create photoshop command"
     
-    show_message "\033[1;32mLauncher erstellt! Du kannst Photoshop starten mit:\e[0m"
-    show_message "\033[1;36m  - Befehl: photoshop\e[0m"
-    show_message "\033[1;36m  - Desktop-Menü: Suche nach 'Photoshop'\e[0m"
-    show_message "\033[1;36m  - Direkt: $SCR_PATH/launcher/launcher.sh\e[0m"
+    show_message "${C_GREEN}✓ Launcher erstellt!${C_RESET} Du kannst Photoshop starten mit:"
+    show_message "${C_CYAN}  - Befehl:${C_RESET} ${C_WHITE}photoshop${C_RESET}"
+    show_message "${C_CYAN}  - Desktop-Menü:${C_RESET} ${C_WHITE}Suche nach 'Photoshop'${C_RESET}"
+    show_message "${C_CYAN}  - Direkt:${C_RESET} ${C_WHITE}$SCR_PATH/launcher/launcher.sh${C_RESET}"
 
     unset desktop_entry desktop_entry_dest launcher_path launcher_dest
 }
@@ -599,7 +639,7 @@ function download_component() {
                 aria2c -c -x 8 -d "$CACHE_PATH" -o $4 "$url"
                 
                 if [ $? -eq 0 ];then
-                    notify-send "Photoshop CC" "$4 download completed" -i "download"
+                    notify-send "Photoshop" "$4 download completed" -i "download"
                 fi
 
             elif [ "$curlpkg" = "true" ];then
@@ -610,7 +650,7 @@ function download_component() {
                 wget "$url" -P "$CACHE_PATH"
                 
                 if [ $? -eq 0 ];then
-                    notify-send "Photoshop CC" "$4 download completed" -i "download"
+                    notify-send "Photoshop" "$4 download completed" -i "download"
                 fi
             fi
             ((tout++))
@@ -791,7 +831,7 @@ function load_paths() {
     if [ ! -f "$datafile" ]; then
         echo "ERROR: Installation data file not found: $datafile"
         if [ "$skip_validation" = "false" ]; then
-            echo "Please reinstall Photoshop CC using setup.sh"
+            echo -e "${C_RED}✗${C_RESET} ${C_YELLOW}Please reinstall Photoshop using setup.sh${C_RESET}"
             exit 1
         else
             # For uninstaller: set empty paths and continue
@@ -821,7 +861,7 @@ function load_paths() {
     if [ -z "$SCR_PATH" ]; then
         echo "ERROR: Installation path (SCR_PATH) is empty or corrupted in $datafile"
         if [ "$skip_validation" = "false" ]; then
-            echo "Please reinstall Photoshop CC using setup.sh"
+            echo -e "${C_RED}✗${C_RESET} ${C_YELLOW}Please reinstall Photoshop using setup.sh${C_RESET}"
             exit 1
         fi
     fi
@@ -829,7 +869,7 @@ function load_paths() {
     if [ -z "$CACHE_PATH" ]; then
         echo "ERROR: Cache path (CACHE_PATH) is empty or corrupted in $datafile"
         if [ "$skip_validation" = "false" ]; then
-            echo "Please reinstall Photoshop CC using setup.sh"
+            echo -e "${C_RED}✗${C_RESET} ${C_YELLOW}Please reinstall Photoshop using setup.sh${C_RESET}"
             exit 1
         fi
     fi
@@ -839,7 +879,7 @@ function load_paths() {
     if [[ "$SCR_PATH" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
         echo "ERROR: SCR_PATH zeigt auf System-Verzeichnis (Sicherheitsrisiko): $SCR_PATH"
         if [ "$skip_validation" = "false" ]; then
-            echo "Please reinstall Photoshop CC using setup.sh"
+            echo -e "${C_RED}✗${C_RESET} ${C_YELLOW}Please reinstall Photoshop using setup.sh${C_RESET}"
             exit 1
         fi
     fi
@@ -847,7 +887,7 @@ function load_paths() {
     if [[ "$CACHE_PATH" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
         echo "ERROR: CACHE_PATH zeigt auf System-Verzeichnis (Sicherheitsrisiko): $CACHE_PATH"
         if [ "$skip_validation" = "false" ]; then
-            echo "Please reinstall Photoshop CC using setup.sh"
+            echo -e "${C_RED}✗${C_RESET} ${C_YELLOW}Please reinstall Photoshop using setup.sh${C_RESET}"
             exit 1
         fi
     fi
@@ -857,14 +897,14 @@ function load_paths() {
         if [ ! -d "$SCR_PATH" ]; then
             echo "ERROR: Installation directory does not exist or is not a directory: $SCR_PATH"
             echo "Photoshop may have been moved or deleted"
-            echo "Please reinstall Photoshop CC using setup.sh"
+            echo -e "${C_RED}✗${C_RESET} ${C_YELLOW}Please reinstall Photoshop using setup.sh${C_RESET}"
             exit 1
         fi
         
         if [ ! -d "$CACHE_PATH" ]; then
             echo "ERROR: Cache directory does not exist: $CACHE_PATH"
             echo "Photoshop cache may have been moved or deleted"
-            echo "Please reinstall Photoshop CC using setup.sh"
+            echo -e "${C_RED}✗${C_RESET} ${C_YELLOW}Please reinstall Photoshop using setup.sh${C_RESET}"
             exit 1
         fi
     fi

@@ -1584,17 +1584,21 @@ function main() {
     # Write header to log file (not to console)
     echo "" >> "$LOG_FILE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ═══════════════════════════════════════════════════════════" >> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Photoshop CC Installation gestartet: $(date '+%Y-%m-%d %H:%M:%S')" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Photoshop Installation gestartet: $(date '+%Y-%m-%d %H:%M:%S')" >> "$LOG_FILE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Log-Datei: $LOG_FILE" >> "$LOG_FILE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Error-Log: $ERROR_LOG" >> "$LOG_FILE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ═══════════════════════════════════════════════════════════" >> "$LOG_FILE"
     echo "" >> "$LOG_FILE"
     
-    # Show only important message to user
-    echo "═══════════════════════════════════════════════════════════════"
-    echo "Photoshop CC Installation gestartet"
-    echo "Log-Datei: $LOG_FILE"
-    echo "═══════════════════════════════════════════════════════════════"
+    # Show only important message to user (with colors)
+    echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+    if [ "$LANG_CODE" = "de" ]; then
+        echo -e "${C_MAGENTA}Photoshop Installation gestartet${C_RESET}"
+    else
+        echo -e "${C_MAGENTA}Photoshop Installation started${C_RESET}"
+    fi
+    echo -e "${C_GRAY}Log-Datei:${C_RESET} ${C_WHITE}$LOG_FILE${C_RESET}"
+    echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
     echo ""
     
     # Log comprehensive system information (to file only)
@@ -1610,7 +1614,7 @@ function main() {
     log_debug "=== End Script Initialization ==="
     echo "" >> "$LOG_FILE"
     
-    log "Erstelle Verzeichnisse..."
+    log "${C_YELLOW}→${C_RESET} ${C_CYAN}Erstelle Verzeichnisse...${C_RESET}"
     mkdir -p $SCR_PATH
     log_debug "SCR_PATH erstellt: $SCR_PATH"
     mkdir -p $CACHE_PATH
@@ -1620,13 +1624,13 @@ function main() {
     setup_log "================| script executed |================"
     log_debug "setup_log aufgerufen"
 
-    echo "Prüfe System-Voraussetzungen..."
-    log "Prüfe System-Architektur..."
+    echo -e "${C_CYAN}→${C_RESET} ${C_CYAN}Prüfe System-Voraussetzungen...${C_RESET}"
+    log "${C_CYAN}Prüfe System-Architektur...${C_RESET}"
     is64
     log_debug "is64 Prüfung abgeschlossen"
 
     #make sure wine and winetricks package is already installed
-    log "Prüfe erforderliche Pakete..."
+    log "${C_CYAN}Prüfe erforderliche Pakete...${C_RESET}"
     log_debug "Prüfe wine..."
     package_installed wine
     log_debug "Prüfe md5sum..."
@@ -1637,8 +1641,8 @@ function main() {
 
     # Setup Wine environment - interactive selection
     # This will show a menu and ask the user to choose
-    echo "Wine/Proton-Version Auswahl..."
-    log "Starte Wine/Proton-Version Auswahl..."
+    echo -e "${C_CYAN}→${C_RESET} ${C_CYAN}Wine/Proton-Version Auswahl...${C_RESET}"
+    log "${C_CYAN}Starte Wine/Proton-Version Auswahl...${C_RESET}"
     log_debug "Rufe setup_wine_environment() auf..."
     log_environment
     if ! setup_wine_environment; then
@@ -1651,13 +1655,13 @@ function main() {
     
     # Confirm selection
     if [ -n "$PROTON_PATH" ] && [ "$PROTON_PATH" != "system" ]; then
-        show_message "$([ "$LANG_CODE" = "de" ] && echo "✓ Proton GE wird verwendet (bessere Kompatibilität)" || echo "✓ Using Proton GE (better compatibility)")"
+        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$([ "$LANG_CODE" = "de" ] && echo "Proton GE wird verwendet (bessere Kompatibilität)" || echo "Using Proton GE (better compatibility)")${C_RESET}"
         log "Proton GE aktiviert: $PROTON_PATH"
     elif [ "$PROTON_PATH" = "system" ]; then
-        show_message "$([ "$LANG_CODE" = "de" ] && echo "✓ Proton GE (system) wird verwendet" || echo "✓ Using Proton GE (system)")"
+        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$([ "$LANG_CODE" = "de" ] && echo "Proton GE (system) wird verwendet" || echo "Using Proton GE (system)")${C_RESET}"
         log "Proton GE (system) aktiviert"
     else
-        show_message "$([ "$LANG_CODE" = "de" ] && echo "✓ Standard-Wine wird verwendet" || echo "✓ Using standard Wine")"
+        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$([ "$LANG_CODE" = "de" ] && echo "Standard-Wine wird verwendet" || echo "Using standard Wine")${C_RESET}"
         log "Standard-Wine aktiviert"
     fi
     log ""
@@ -1680,10 +1684,10 @@ function main() {
     log "Aktueller PATH: $PATH"
     
     #config wine prefix and install mono and gecko automatic
-    echo -e "\033[1;93mplease install mono and gecko packages then click on OK button\e[0m"
+    echo -e "${C_YELLOW}⚠${C_RESET} ${C_CYAN}please install mono and gecko packages then click on OK button${C_RESET}"
     "$winecfg_binary" 2> "$SCR_PATH/wine-error.log"
     if [ $? -eq 0 ];then
-        show_message "prefix configured..."
+        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}prefix configured...${C_RESET}"
         sleep 5
     else
         error "prefix config failed :("
@@ -1706,30 +1710,30 @@ function main() {
     
     # Setze Windows-Version basierend auf erkannte Photoshop-Version
     # OPTIMIERUNG: Neuere Versionen (2021+) funktionieren besser mit Windows 10
-    # CC 2019 funktioniert auch mit Windows 10 (bessere Kompatibilität)
-    log "$MSG_SET_WIN10"
+    # Photoshop funktioniert auch mit Windows 10 (bessere Kompatibilität)
+    log "${C_YELLOW}→${C_RESET} ${C_CYAN}$MSG_SET_WIN10${C_RESET}"
     
     # Für alle Versionen verwende Windows 10 (beste Kompatibilität)
     # KRITISCH: PS_VERSION mit ${PS_VERSION:-} schützen (kann noch nicht gesetzt sein)
     if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
-        log "  → Verwende Windows 10 (empfohlen für ${PS_VERSION:-unknown})"
+        log "${C_YELLOW}  →${C_RESET} ${C_GRAY}Verwende Windows 10 (empfohlen für ${PS_VERSION:-unknown})${C_RESET}"
     else
-        log "  → Verwende Windows 10 (auch für ${PS_VERSION:-unknown} kompatibel)"
+        log "${C_YELLOW}  →${C_RESET} ${C_GRAY}Verwende Windows 10 (auch für ${PS_VERSION:-unknown} kompatibel)${C_RESET}"
     fi
     winetricks -q win10 >> "$LOG_FILE" 2>&1
     
     # Core components: Install VC++ Runtimes
     # Use winetricks (standard method, proven and reliable)
-    log "$MSG_VCRUN"
+    log "${C_YELLOW}→${C_RESET} ${C_CYAN}$MSG_VCRUN${C_RESET}"
     
     # Install VC++ Runtimes with winetricks (standard method, proven and reliable)
     # Standard: Use winetricks for VC++ Runtimes (proven and reliable)
     if [ "$LANG_CODE" = "de" ]; then
-        log "  → Installiere VC++ Runtimes mit winetricks (Standard-Methode)..."
-        echo -ne "${C_YELLOW}  → Installiere VC++ Runtimes mit winetricks (dies kann einige Minuten dauern)...${C_RESET} "
+        log "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installiere VC++ Runtimes mit winetricks (Standard-Methode)...${C_RESET}"
+        echo -ne "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installiere VC++ Runtimes mit winetricks (dies kann einige Minuten dauern)...${C_RESET} "
     else
-        log "  → Installing VC++ Runtimes with winetricks (standard method)..."
-        echo -ne "${C_YELLOW}  → Installing VC++ Runtimes with winetricks (this may take a few minutes)...${C_RESET} "
+        log "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installing VC++ Runtimes with winetricks (standard method)...${C_RESET}"
+        echo -ne "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installing VC++ Runtimes with winetricks (this may take a few minutes)...${C_RESET} "
     fi
     
     # CRITICAL: winetricks output to temporary file (prevents blocking)
@@ -1746,11 +1750,11 @@ function main() {
     if [ $winetricks_exit_code -eq 0 ]; then
         cat "$winetricks_output_file" >> "$LOG_FILE"
         if [ "$LANG_CODE" = "de" ]; then
-            log "  ✓ winetricks VC++ Installation erfolgreich"
-            echo -e "${C_GREEN}  ✓ VC++ Runtimes erfolgreich installiert${C_RESET}"
+            log "${C_GREEN}  ✓${C_RESET} ${C_CYAN}winetricks VC++ Installation erfolgreich${C_RESET}"
+            echo -e "${C_GREEN}  ✓${C_RESET} ${C_GREEN}VC++ Runtimes erfolgreich installiert${C_RESET}"
         else
-            log "  ✓ winetricks VC++ installation successful"
-            echo -e "${C_GREEN}  ✓ VC++ Runtimes successfully installed${C_RESET}"
+            log "${C_GREEN}  ✓${C_RESET} ${C_CYAN}winetricks VC++ installation successful${C_RESET}"
+            echo -e "${C_GREEN}  ✓${C_RESET} ${C_GREEN}VC++ Runtimes successfully installed${C_RESET}"
         fi
     else
         cat "$winetricks_output_file" >> "$LOG_FILE"
@@ -1765,11 +1769,11 @@ function main() {
     
     rm -f "$winetricks_output_file" 2>/dev/null || true
     
-    log "$MSG_FONTS"
+    log "${C_YELLOW}→${C_RESET} ${C_CYAN}$MSG_FONTS${C_RESET}"
     if [ "$LANG_CODE" = "de" ]; then
-        echo -ne "${C_YELLOW}  → Installiere Schriftarten und Bibliotheken...${C_RESET} "
+        echo -ne "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installiere Schriftarten und Bibliotheken...${C_RESET} "
     else
-        echo -ne "${C_YELLOW}  → Installing fonts and libraries...${C_RESET} "
+        echo -ne "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installing fonts and libraries...${C_RESET} "
     fi
     winetricks -q atmlib corefonts fontsmooth=rgb >> "$LOG_FILE" 2>&1 &
     local fonts_pid=$!
@@ -1777,11 +1781,11 @@ function main() {
     wait $fonts_pid
     echo ""
     
-    log "$MSG_XML"
+    log "${C_YELLOW}→${C_RESET} ${C_CYAN}$MSG_XML${C_RESET}"
     if [ "$LANG_CODE" = "de" ]; then
-        echo -ne "${C_YELLOW}  → Installiere XML und GDI+ Komponenten...${C_RESET} "
+        echo -ne "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installiere XML und GDI+ Komponenten...${C_RESET} "
     else
-        echo -ne "${C_YELLOW}  → Installing XML and GDI+ components...${C_RESET} "
+        echo -ne "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installing XML and GDI+ components...${C_RESET} "
     fi
     winetricks -q msxml3 msxml6 gdiplus >> "$LOG_FILE" 2>&1 &
     local xml_pid=$!
@@ -1793,11 +1797,11 @@ function main() {
     # CRITICAL: Protect PS_VERSION with ${PS_VERSION:-}
     if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
         if [ "$LANG_CODE" = "de" ]; then
-            log "  → Installiere zusätzliche Komponenten für ${PS_VERSION:-unknown}..."
-            echo -ne "${C_YELLOW}  → Installiere zusätzliche Komponenten für ${PS_VERSION:-unknown}...${C_RESET} "
+            log "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installiere zusätzliche Komponenten für ${PS_VERSION:-unknown}...${C_RESET}"
+            echo -ne "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installiere zusätzliche Komponenten für ${PS_VERSION:-unknown}...${C_RESET} "
         else
-            log "  → Installing additional components for ${PS_VERSION:-unknown}..."
-            echo -ne "${C_YELLOW}  → Installing additional components for ${PS_VERSION:-unknown}...${C_RESET} "
+            log "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installing additional components for ${PS_VERSION:-unknown}...${C_RESET}"
+            echo -ne "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installing additional components for ${PS_VERSION:-unknown}...${C_RESET} "
         fi
         # dotnet48 wird für neuere Photoshop-Versionen benötigt
         winetricks -q dotnet48 >> "$LOG_FILE" 2>&1 &
@@ -1813,12 +1817,12 @@ function main() {
     fi
     
     # Workaround für bekannte Wine-Probleme (GitHub Issue #34)
-    log "$MSG_DLL"
+    log "${C_YELLOW}→${C_RESET} ${C_CYAN}$MSG_DLL${C_RESET}"
     winetricks -q dxvk_async=disabled d3d11=native >> "$LOG_FILE" 2>&1
     
     # Zusätzliche Performance & Rendering Fixes
-    show_message "$([ "$LANG_CODE" = "de" ] && echo "Konfiguriere Wine-Registry für bessere Performance..." || echo "Configuring Wine registry for better performance...")"
-    log "Konfiguriere Wine-Registry..."
+    show_message "${C_YELLOW}→${C_RESET} ${C_CYAN}$([ "$LANG_CODE" = "de" ] && echo "Konfiguriere Wine-Registry für bessere Performance..." || echo "Configuring Wine registry for better performance...")${C_RESET}"
+    log "${C_CYAN}Konfiguriere Wine-Registry...${C_RESET}"
     
     # Enable CSMT for better performance (Command Stream Multi-Threading)
     log "  - CSMT aktivieren"
@@ -1834,13 +1838,13 @@ function main() {
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v StrictDrawOrdering /t REG_SZ /d disabled /f 2>/dev/null || true
     
     # Fix UI scaling issues (Issue #56)
-    show_message "$([ "$LANG_CODE" = "de" ] && echo "Konfiguriere DPI-Skalierung..." || echo "Configuring DPI scaling...")"
+    show_message "${C_YELLOW}→${C_RESET} ${C_CYAN}$([ "$LANG_CODE" = "de" ] && echo "Konfiguriere DPI-Skalierung..." || echo "Configuring DPI scaling...")${C_RESET}"
     wine reg add "HKEY_CURRENT_USER\\Control Panel\\Desktop" /v LogPixels /t REG_DWORD /d 96 /f >> "$LOG_FILE" 2>&1 || true
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Fonts" /v Smoothing /t REG_DWORD /d 2 /f >> "$LOG_FILE" 2>&1 || true
     
     # CRITICAL: Set Windows version explicitly to Windows 10 again
     # (winetricks installations can reset the version, especially IE8)
-    log "  → Stelle sicher, dass Windows-Version auf Windows 10 gesetzt ist (vor Adobe Installer)..."
+    log "${C_YELLOW}  →${C_RESET} ${C_GRAY}Stelle sicher, dass Windows-Version auf Windows 10 gesetzt ist (vor Adobe Installer)...${C_RESET}"
     winetricks -q win10 >> "$LOG_FILE" 2>&1 || log "  ⚠ win10 konnte nicht gesetzt werden"
     
     #install photoshop
@@ -1869,20 +1873,20 @@ function main() {
     fi
 
     launcher
-    show_message "\033[1;33mwhen you run photoshop for the first time it may take a while\e[0m"
-    show_message "Almost finished..."
+    show_message "${C_YELLOW}⚠${C_RESET} ${C_CYAN}$([ "$LANG_CODE" = "de" ] && echo "Beim ersten Start von Photoshop kann es etwas länger dauern" || echo "When you run photoshop for the first time it may take a while")${C_RESET}"
+    show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$([ "$LANG_CODE" = "de" ] && echo "Fast fertig..." || echo "Almost finished...")${C_RESET}"
     sleep 30
 }
 
 function replacement() {
     # Replacement component ist optional für die lokale Installation
     # Diese Dateien werden normalerweise nur für UI-Icons benötigt
-    log "Überspringe replacement component (optional für lokale Installation)..."
+    log "${C_GRAY}Überspringe replacement component (optional für lokale Installation)...${C_RESET}"
     
     # Verwende dynamischen Pfad basierend auf erkannte Version
     local destpath="$PS_INSTALL_PATH/Resources"
     if [ ! -d "$destpath" ]; then
-        show_message "Photoshop Resources-Pfad noch nicht vorhanden, wird später erstellt..."
+        show_message "${C_YELLOW}→${C_RESET} ${C_GRAY}Photoshop Resources-Pfad noch nicht vorhanden, wird später erstellt...${C_RESET}"
     fi
     
     unset destpath
@@ -1897,7 +1901,11 @@ function install_photoshopSE() {
     # Colorful header (like setup.sh banner)
     echo ""
     echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_MAGENTA}           Photoshop CC Installation${C_RESET}"
+    if [ "$LANG_CODE" = "de" ]; then
+        echo -e "${C_MAGENTA}           Photoshop Installation${C_RESET}"
+    else
+        echo -e "${C_MAGENTA}           Photoshop Installation${C_RESET}"
+    fi
     echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
     echo ""
     
@@ -1988,26 +1996,26 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     
     # IE8 Installation (STANDARD - immer installieren für beste Kompatibilität)
     if [ "$LANG_CODE" = "de" ]; then
-        log "  → Installiere IE8 über winetricks (dauert 5-10 Minuten)..."
-        log "     (Standard-Installation für beste Kompatibilität mit Adobe Installer)"
+        log "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installiere IE8 über winetricks (dauert 5-10 Minuten)...${C_RESET}"
+        log "${C_GRAY}     (Standard-Installation für beste Kompatibilität mit Adobe Installer)${C_RESET}"
     else
-        log "  → Installing IE8 via winetricks (takes 5-10 minutes)..."
-        log "     (Standard installation for best compatibility with Adobe Installer)"
+        log "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installing IE8 via winetricks (takes 5-10 minutes)...${C_RESET}"
+        log "${C_GRAY}     (Standard installation for best compatibility with Adobe Installer)${C_RESET}"
     fi
     
     if winetricks -q ie8 >> "$LOG_FILE" 2>&1; then
-        log "  ✓ IE8 erfolgreich installiert"
+        log "${C_GREEN}  ✓${C_RESET} ${C_CYAN}IE8 erfolgreich installiert${C_RESET}"
         # CRITICAL: IE8 resets Windows version to win7 - must be set back to win10!
-        log "  → Setze Windows-Version erneut auf Windows 10 (IE8 hat sie auf win7 zurückgesetzt)..."
-        winetricks -q win10 >> "$LOG_FILE" 2>&1 || log "  ⚠ win10 konnte nicht erneut gesetzt werden"
-        log "  ✓ Windows 10 erneut gesetzt"
+        log "${C_YELLOW}  →${C_RESET} ${C_GRAY}Setze Windows-Version erneut auf Windows 10 (IE8 hat sie auf win7 zurückgesetzt)...${C_RESET}"
+        winetricks -q win10 >> "$LOG_FILE" 2>&1 || log "${C_YELLOW}  ⚠${C_RESET} ${C_YELLOW}win10 konnte nicht erneut gesetzt werden${C_RESET}"
+        log "${C_GREEN}  ✓${C_RESET} ${C_CYAN}Windows 10 erneut gesetzt${C_RESET}"
     else
-        log "  ⚠ IE8 Installation fehlgeschlagen - verwende Workarounds"
+        log "${C_YELLOW}  ⚠${C_RESET} ${C_YELLOW}IE8 Installation fehlgeschlagen - verwende Workarounds${C_RESET}"
     fi
     
     log ""
-    log "  → Setze umfassende DLL-Overrides für IE-Komponenten..."
-    log "     (Best Practice: native,builtin für maximale Kompatibilität)"
+    log "${C_YELLOW}  →${C_RESET} ${C_CYAN}Setze umfassende DLL-Overrides für IE-Komponenten...${C_RESET}"
+    log "${C_GRAY}     (Best Practice: native,builtin für maximale Kompatibilität)${C_RESET}"
     
     # Best Practice: native,builtin (versuche native zuerst, dann builtin als Fallback)
     # For critical IE components we use native,builtin
