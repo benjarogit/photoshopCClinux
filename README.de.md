@@ -1,4 +1,4 @@
-# Adobe Photoshop Installer für Linux ![Status](https://img.shields.io/badge/status-aktive%20entwicklung-yellow)
+# Adobe Photoshop Installer für Linux ![Status](https://img.shields.io/badge/status-aktive%20entwicklung-orange)
 
 > [!NOTE]
 > **Experimenteller Status - Work in Progress**
@@ -22,7 +22,7 @@
 
 ![Photoshop on Linux](images/Screenshot.png)
 
-![Lizenz](https://img.shields.io/badge/license-GPL--3.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![Wine](https://img.shields.io/badge/wine-5.0%2B-red) ![Photoshop](https://img.shields.io/badge/Photoshop-CC-blue)
+![Lizenz](https://img.shields.io/badge/license-GPL--3.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![OS](https://img.shields.io/badge/OS-CachyOS-blue) ![Desktop](https://img.shields.io/badge/Desktop-KDE-blue) ![Wine](https://img.shields.io/badge/Wine-5.0%2B-red) ![Proton](https://img.shields.io/badge/Proton-GE-orange) ![Photoshop](https://img.shields.io/badge/Photoshop-CC%202021-blue)
 
 **Adobe Photoshop nativ auf Linux mit Wine ausführen**
 
