@@ -189,10 +189,36 @@ function show_wine_selection_menu() {
         1)
             msg_run_photoshop
             run_script "$SCRIPT_DIR/scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh" --wine-standard
+            local exit_code=$?
+            # Exit code 130 = STRG+C (user interrupt) - return to main menu
+            if [ $exit_code -eq 130 ]; then
+                if [ "$LANG_CODE" = "de" ]; then
+                    echo ""
+                    echo "Installation abgebrochen. Zurück zum Hauptmenü..."
+                else
+                    echo ""
+                    echo "Installation cancelled. Returning to main menu..."
+                fi
+                wait_second 2
+                main
+            fi
             ;;
         2)
             msg_run_photoshop
             run_script "$SCRIPT_DIR/scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh" --proton-ge
+            local exit_code=$?
+            # Exit code 130 = STRG+C (user interrupt) - return to main menu
+            if [ $exit_code -eq 130 ]; then
+                if [ "$LANG_CODE" = "de" ]; then
+                    echo ""
+                    echo "Installation abgebrochen. Zurück zum Hauptmenü..."
+                else
+                    echo ""
+                    echo "Installation cancelled. Returning to main menu..."
+                fi
+                wait_second 2
+                main
+            fi
             ;;
         3|"")
             main

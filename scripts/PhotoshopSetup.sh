@@ -90,14 +90,83 @@ TIMESTAMP=$(date +%d.%m.%y\ %H:%M\ Uhr)
 LOG_FILE="$LOG_DIR/Log: ${TIMESTAMP}.log"
 ERROR_LOG="$LOG_DIR/Log: ${TIMESTAMP}_errors.log"
 
+# ANSI Color codes (compatible with setup.sh)
+# Check if terminal supports colors
+if [ -t 1 ] && [ "$TERM" != "dumb" ]; then
+    C_RESET="\033[0m"
+    C_CYAN="\033[0;36;1m"
+    C_MAGENTA="\033[0;35;1m"
+    C_BLUE="\033[0;34;1m"
+    C_YELLOW="\033[0;33;1m"
+    C_WHITE="\033[0;37;1m"
+    C_GREEN="\033[0;32;1m"
+    C_GRAY="\033[0;37m"
+    C_RED="\033[1;31m"
+else
+    # No colors for dumb terminals
+    C_RESET=""
+    C_CYAN=""
+    C_MAGENTA=""
+    C_BLUE=""
+    C_YELLOW=""
+    C_WHITE=""
+    C_GREEN=""
+    C_GRAY=""
+    C_RED=""
+fi
+
+# Spinner function for long-running processes
+spinner() {
+    local pid=$1
+    local message="${2:-}"
+    local spinstr='|/-\'
+    local temp
+    
+    # Show message if provided
+    if [ -n "$message" ]; then
+        echo -ne "${C_YELLOW}$message${C_RESET} "
+    fi
+    
+    while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
+        temp=${spinstr#?}
+        printf "${C_CYAN}[%c]${C_RESET}" "$spinstr"
+        local old_IFS="${IFS:-}"
+        IFS=
+        spinstr=$temp${spinstr%"$temp"}
+        IFS="$old_IFS"
+        sleep 0.1
+        printf "\b\b\b"
+    done
+    printf "   \b\b\b"
+    echo ""
+}
+
+# Run command with spinner in background
+run_with_spinner() {
+    local message="$1"
+    shift
+    local cmd="$@"
+    
+    # Run command in background and capture PID
+    eval "$cmd" >> "$LOG_FILE" 2>&1 &
+    local pid=$!
+    
+    # Show spinner while command runs
+    spinner $pid "$message"
+    
+    # Wait for command to finish and get exit code
+    wait $pid
+    return $?
+}
+
 # Enhanced logging functions for comprehensive debugging
 # ALL output goes to log file, but only important messages to console
 log() {
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     # Write to log file
     echo "[$timestamp] $@" >> "$LOG_FILE"
-    # Also show to user (important messages)
-    echo "$@"
+    # Also show to user (important messages) with color
+    echo -e "${C_GREEN}$@${C_RESET}"
 }
 
 log_error() {
@@ -105,8 +174,24 @@ log_error() {
     # Write to both log files
     echo "[$timestamp] ERROR: $@" >> "$LOG_FILE"
     echo "[$timestamp] ERROR: $@" >> "$ERROR_LOG"
-    # Always show errors to user
-    echo -e "\033[1;31mERROR: $@\033[0m"
+    # Always show errors to user with red color
+    echo -e "${C_RED}ERROR: $@${C_RESET}"
+}
+
+log_warning() {
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    # Write to log file
+    echo "[$timestamp] WARNING: $@" >> "$LOG_FILE"
+    # Show warning with yellow color
+    echo -e "${C_YELLOW}WARNING: $@${C_RESET}"
+}
+
+log_info() {
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    # Write to log file
+    echo "[$timestamp] INFO: $@" >> "$LOG_FILE"
+    # Show info with cyan color
+    echo -e "${C_CYAN}INFO: $@${C_RESET}"
 }
 
 log_debug() {
@@ -822,54 +907,108 @@ select_wine_version() {
             if [ $has_proton -eq 0 ] && ([ "$system" = "cachyos" ] || [ "$system" = "arch" ] || [ "$system" = "manjaro" ]); then
                 echo ""
                 echo "═══════════════════════════════════════════════════════════════"
-                echo "           IMPORTANT: Select Wine Version"
+                if [ "$LANG_CODE" = "de" ]; then
+                    echo "           WICHTIG: Wine-Version wählen"
+                else
+                    echo "           IMPORTANT: Select Wine Version"
+                fi
                 echo "═══════════════════════════════════════════════════════════════"
                 echo ""
-                echo "ℹ System detected: $system"
-                echo ""
-                echo "For Photoshop, you have two options:"
-                echo ""
-                echo "  1. PROTON GE (RECOMMENDED)"
-                echo "     → Better compatibility, fewer errors"
-                echo "     → Will be installed automatically now (takes 2-5 minutes)"
-                echo ""
-                echo "  2. STANDARD WINE (Fallback)"
-                echo "     → Already installed, usually works too"
-                echo "     → Installation starts immediately"
-                echo ""
-                echo "═══════════════════════════════════════════════════════════════"
-                echo ""
-                echo "What would you like to do?"
-                echo ""
-                echo "   [Y] Yes - Install Proton GE (RECOMMENDED for best results)"
-                echo "   [N] No - Continue with Standard Wine (faster, but less optimal)"
-                echo ""
-                IFS= read -r -p "Your choice [Y/n]: " install_proton
+                if [ "$LANG_CODE" = "de" ]; then
+                    echo "ℹ System erkannt: $system"
+                    echo ""
+                    echo "Für Photoshop stehen zwei Optionen zur Verfügung:"
+                    echo ""
+                    echo "  1. PROTON GE (EMPFOHLEN)"
+                    echo "     → Bessere Kompatibilität, weniger Fehler"
+                    echo "     → Wird jetzt automatisch installiert (dauert 2-5 Minuten)"
+                    echo ""
+                    echo "  2. STANDARD WINE (Fallback)"
+                    echo "     → Bereits installiert, funktioniert meist auch"
+                    echo "     → Installation startet sofort"
+                    echo ""
+                    echo "═══════════════════════════════════════════════════════════════"
+                    echo ""
+                    echo "Was möchtest du tun?"
+                    echo ""
+                    echo "   [J] Ja - Proton GE installieren (EMPFOHLEN für beste Ergebnisse)"
+                    echo "   [N] Nein - Mit Standard Wine fortfahren (schneller, aber weniger optimal)"
+                    echo ""
+                    IFS= read -r -p "Deine Wahl [J/n]: " install_proton
+                else
+                    echo "ℹ System detected: $system"
+                    echo ""
+                    echo "For Photoshop, you have two options:"
+                    echo ""
+                    echo "  1. PROTON GE (RECOMMENDED)"
+                    echo "     → Better compatibility, fewer errors"
+                    echo "     → Will be installed automatically now (takes 2-5 minutes)"
+                    echo ""
+                    echo "  2. STANDARD WINE (Fallback)"
+                    echo "     → Already installed, usually works too"
+                    echo "     → Installation starts immediately"
+                    echo ""
+                    echo "═══════════════════════════════════════════════════════════════"
+                    echo ""
+                    echo "What would you like to do?"
+                    echo ""
+                    echo "   [Y] Yes - Install Proton GE (RECOMMENDED for best results)"
+                    echo "   [N] No - Continue with Standard Wine (faster, but less optimal)"
+                    echo ""
+                    IFS= read -r -p "Your choice [Y/n]: " install_proton
+                fi
                 if [[ "$install_proton" =~ ^[YyJj]$ ]] || [ -z "$install_proton" ]; then
                     echo ""
                     echo "═══════════════════════════════════════════════════════════════"
-                    echo "           Installing Proton GE now"
+                    if [ "$LANG_CODE" = "de" ]; then
+                        echo "           Proton GE wird jetzt installiert"
+                    else
+                        echo "           Installing Proton GE now"
+                    fi
                     echo "═══════════════════════════════════════════════════════════════"
                     echo ""
-                    echo "STEP 1/2: Checking if Wine is installed..."
+                    if [ "$LANG_CODE" = "de" ]; then
+                        echo "SCHRITT 1/2: Prüfe ob Wine installiert ist..."
+                    else
+                        echo "STEP 1/2: Checking if Wine is installed..."
+                    fi
                     echo ""
                     if ! command -v wine &> /dev/null; then
-                        echo "⚠ Wine is missing - installing now..."
-                        echo "   (Wine is needed for Photoshop components)"
+                        if [ "$LANG_CODE" = "de" ]; then
+                            echo "⚠ Wine fehlt - installiere jetzt..."
+                            echo "   (Wine wird für Photoshop-Komponenten benötigt)"
+                        else
+                            echo "⚠ Wine is missing - installing now..."
+                            echo "   (Wine is needed for Photoshop components)"
+                        fi
                         echo ""
                         if command -v pacman &> /dev/null; then
                             sudo pacman -S wine
                         else
-                            echo "   Please install Wine manually for your distribution"
-                            IFS= read -r -p "Press Enter when Wine is installed: " wait_wine
+                            if [ "$LANG_CODE" = "de" ]; then
+                                echo "   Bitte installiere Wine manuell für deine Distribution"
+                                IFS= read -r -p "Drücke Enter wenn Wine installiert ist: " wait_wine
+                            else
+                                echo "   Please install Wine manually for your distribution"
+                                IFS= read -r -p "Press Enter when Wine is installed: " wait_wine
+                            fi
                         fi
                         echo ""
                     else
-                        echo "✓ Wine is already installed"
+                        if [ "$LANG_CODE" = "de" ]; then
+                            echo "✓ Wine ist bereits installiert"
+                        else
+                            echo "✓ Wine is already installed"
+                        fi
                         echo ""
                     fi
-                    echo "STEP 2/2: Installing Proton GE..."
-                    echo "   (This may take 2-5 minutes - please wait...)"
+                    if [ "$LANG_CODE" = "de" ]; then
+                        echo "SCHRITT 2/2: Installiere Proton GE..."
+                        echo "   (Dies kann 2-5 Minuten dauern - bitte warten...)"
+                    else
+                        echo "STEP 2/2: Installing Proton GE..."
+                        echo "   (This may take 2-5 minutes - please wait...)"
+                    fi
                     echo ""
                     local install_success=0
                     if command -v yay &> /dev/null; then
@@ -881,13 +1020,21 @@ select_wine_version() {
                             install_success=1
                         fi
                     else
-                        echo "❌ No AUR helper (yay/paru) found!"
-                        echo "   Install yay or paru, then run:"
-                        echo "   yay -S proton-ge-custom-bin"
-                        echo ""
-                        IFS= read -r -p "Press Enter when Proton GE is installed, or [C] to Cancel: " continue_install
-                        if [[ "$continue_install" =~ ^[Cc]$ ]]; then
-                            error "Installation cancelled"
+                        if [ "$LANG_CODE" = "de" ]; then
+                            echo "❌ Kein AUR-Helper (yay/paru) gefunden!"
+                            echo "   Installiere yay oder paru, dann führe aus:"
+                            echo "   yay -S proton-ge-custom-bin"
+                            echo ""
+                            IFS= read -r -p "Drücke Enter wenn Proton GE installiert ist, oder [A] zum Abbrechen: " continue_install
+                        else
+                            echo "❌ No AUR helper (yay/paru) found!"
+                            echo "   Install yay or paru, then run:"
+                            echo "   yay -S proton-ge-custom-bin"
+                            echo ""
+                            IFS= read -r -p "Press Enter when Proton GE is installed, or [C] to Cancel: " continue_install
+                        fi
+                        if [[ "$continue_install" =~ ^[CcAa]$ ]]; then
+                            error "$([ "$LANG_CODE" = "de" ] && echo "Installation abgebrochen" || echo "Installation cancelled")"
                             exit 1
                         fi
                         # Assume success if user pressed Enter
@@ -896,31 +1043,53 @@ select_wine_version() {
                     
                     if [ $install_success -eq 0 ]; then
                         echo ""
-                        echo "❌ ERROR: Proton GE installation failed!"
-                        echo ""
-                        echo "Do you want to continue with Standard Wine anyway?"
-                        IFS= read -r -p "   [Y] Yes - Continue with Standard Wine  [N] No - Cancel [Y/n]: " continue_with_wine
+                        if [ "$LANG_CODE" = "de" ]; then
+                            echo "❌ FEHLER: Proton GE Installation fehlgeschlagen!"
+                            echo ""
+                            echo "Möchtest du trotzdem mit Standard Wine fortfahren?"
+                            IFS= read -r -p "   [J] Ja - Mit Standard Wine fortfahren  [N] Nein - Abbrechen [J/n]: " continue_with_wine
+                        else
+                            echo "❌ ERROR: Proton GE installation failed!"
+                            echo ""
+                            echo "Do you want to continue with Standard Wine anyway?"
+                            IFS= read -r -p "   [Y] Yes - Continue with Standard Wine  [N] No - Cancel [Y/n]: " continue_with_wine
+                        fi
                         if [[ "$continue_with_wine" =~ ^[Nn]$ ]]; then
-                            error "Installation cancelled"
+                            error "$([ "$LANG_CODE" = "de" ] && echo "Installation abgebrochen" || echo "Installation cancelled")"
                             exit 1
                         fi
                         # Continue with standard Wine
                         selection=1
                         echo ""
-                        echo "→ Using Standard Wine..."
+                        if [ "$LANG_CODE" = "de" ]; then
+                            echo "→ Verwende Standard Wine..."
+                        else
+                            echo "→ Using Standard Wine..."
+                        fi
                         echo ""
                         return 0
                     fi
                     
                     echo ""
                     echo "═══════════════════════════════════════════════════════════════"
-                    echo "           ✓ Proton GE successfully installed!"
+                    if [ "$LANG_CODE" = "de" ]; then
+                        echo "           ✓ Proton GE erfolgreich installiert!"
+                    else
+                        echo "           ✓ Proton GE successfully installed!"
+                    fi
                     echo "═══════════════════════════════════════════════════════════════"
                     echo ""
-                    echo "Now you have multiple options available:"
-                    echo "   → You can choose between Proton GE and Standard Wine"
-                    echo ""
-                    echo "Searching for available versions..."
+                    if [ "$LANG_CODE" = "de" ]; then
+                        echo "Jetzt stehen dir mehrere Optionen zur Verfügung:"
+                        echo "   → Du kannst zwischen Proton GE und Standard Wine wählen"
+                        echo ""
+                        echo "Suche nach verfügbaren Versionen..."
+                    else
+                        echo "Now you have multiple options available:"
+                        echo "   → You can choose between Proton GE and Standard Wine"
+                        echo ""
+                        echo "Searching for available versions..."
+                    fi
                     echo ""
                     # Re-detect after installation
                     detect_all_wine_versions
@@ -939,29 +1108,53 @@ select_wine_version() {
                     if [ $proton_index -ge 0 ]; then
                         # Use Proton GE automatically
                         selection="${WINE_OPTIONS[$proton_index]}"
-                        echo "✓ Using automatically: ${WINE_DESCRIPTIONS[$proton_index]}"
-                        echo ""
-                        echo "→ Installation will now continue automatically..."
+                        if [ "$LANG_CODE" = "de" ]; then
+                            echo "✓ Verwende automatisch: ${WINE_DESCRIPTIONS[$proton_index]}"
+                            echo ""
+                            echo "→ Installation wird jetzt automatisch fortgesetzt..."
+                        else
+                            echo "✓ Using automatically: ${WINE_DESCRIPTIONS[$proton_index]}"
+                            echo ""
+                            echo "→ Installation will now continue automatically..."
+                        fi
                         echo ""
                     else
                         # Fallback to first option
                         selection=1
-                        echo "✓ Using: ${WINE_DESCRIPTIONS[0]}"
-                        echo ""
-                        echo "→ Installation will now continue automatically..."
+                        if [ "$LANG_CODE" = "de" ]; then
+                            echo "✓ Verwende: ${WINE_DESCRIPTIONS[0]}"
+                            echo ""
+                            echo "→ Installation wird jetzt automatisch fortgesetzt..."
+                        else
+                            echo "✓ Using: ${WINE_DESCRIPTIONS[0]}"
+                            echo ""
+                            echo "→ Installation will now continue automatically..."
+                        fi
                         echo ""
                     fi
                 else
                     echo ""
                     echo "═══════════════════════════════════════════════════════════════"
-                    echo "           Installation with Standard Wine"
+                    if [ "$LANG_CODE" = "de" ]; then
+                        echo "           Installation mit Standard Wine"
+                    else
+                        echo "           Installation with Standard Wine"
+                    fi
                     echo "═══════════════════════════════════════════════════════════════"
                     echo ""
-                    echo "Using: ${WINE_DESCRIPTIONS[0]}"
-                    echo ""
-                    echo "ℹ Note: Standard Wine usually works too,"
-                    echo "   but Proton GE offers better compatibility."
-                    echo "   You can switch to Proton GE later anytime."
+                    if [ "$LANG_CODE" = "de" ]; then
+                        echo "Verwende: ${WINE_DESCRIPTIONS[0]}"
+                        echo ""
+                        echo "ℹ Hinweis: Standard Wine funktioniert meist auch,"
+                        echo "   aber Proton GE bietet bessere Kompatibilität."
+                        echo "   Du kannst später jederzeit zu Proton GE wechseln."
+                    else
+                        echo "Using: ${WINE_DESCRIPTIONS[0]}"
+                        echo ""
+                        echo "ℹ Note: Standard Wine usually works too,"
+                        echo "   but Proton GE offers better compatibility."
+                        echo "   You can switch to Proton GE later anytime."
+                    fi
                     echo ""
                     selection=1
                 fi
@@ -1011,12 +1204,22 @@ select_wine_version() {
         else
             echo "ℹ System detected: $system"
             if [ "$system" = "cachyos" ] || [ "$system" = "arch" ] || [ "$system" = "manjaro" ]; then
-                echo "   → Proton GE recommended for Arch-based systems"
+                if [ "$LANG_CODE" = "de" ]; then
+                    echo "   → Proton GE wird für Arch-basierte Systeme empfohlen"
+                else
+                    echo "   → Proton GE recommended for Arch-based systems"
+                fi
                 if [ $has_proton -eq 0 ]; then
                     echo ""
-                    echo "⚠ Proton GE not found!"
-                    echo "   Install with: yay -S proton-ge-custom-bin"
-                    echo "   Or: paru -S proton-ge-custom-bin"
+                    if [ "$LANG_CODE" = "de" ]; then
+                        echo "⚠ Proton GE nicht gefunden!"
+                        echo "   Installiere es mit: yay -S proton-ge-custom-bin"
+                        echo "   Oder: paru -S proton-ge-custom-bin"
+                    else
+                        echo "⚠ Proton GE not found!"
+                        echo "   Install with: yay -S proton-ge-custom-bin"
+                        echo "   Or: paru -S proton-ge-custom-bin"
+                    fi
                     echo ""
                 fi
             fi
@@ -1521,40 +1724,92 @@ function main() {
     
     # Install VC++ Runtimes with winetricks (standard method, proven and reliable)
     # Standard: Use winetricks for VC++ Runtimes (proven and reliable)
-    log "  → Installiere VC++ Runtimes mit winetricks (Standard-Methode)..."
-    echo "  → Installiere VC++ Runtimes mit winetricks (dies kann einige Minuten dauern)..."
+    if [ "$LANG_CODE" = "de" ]; then
+        log "  → Installiere VC++ Runtimes mit winetricks (Standard-Methode)..."
+        echo -ne "${C_YELLOW}  → Installiere VC++ Runtimes mit winetricks (dies kann einige Minuten dauern)...${C_RESET} "
+    else
+        log "  → Installing VC++ Runtimes with winetricks (standard method)..."
+        echo -ne "${C_YELLOW}  → Installing VC++ Runtimes with winetricks (this may take a few minutes)...${C_RESET} "
+    fi
     
     # CRITICAL: winetricks output to temporary file (prevents blocking)
     local winetricks_output_file
     winetricks_output_file=$(mktemp) || winetricks_output_file="/tmp/winetricks_output_$$.log"
     
-    if winetricks -q vcrun2010 vcrun2012 vcrun2013 vcrun2015 > "$winetricks_output_file" 2>&1; then
+    # Run winetricks with spinner
+    winetricks -q vcrun2010 vcrun2012 vcrun2013 vcrun2015 > "$winetricks_output_file" 2>&1 &
+    local winetricks_pid=$!
+    spinner $winetricks_pid
+    wait $winetricks_pid
+    local winetricks_exit_code=$?
+    
+    if [ $winetricks_exit_code -eq 0 ]; then
         cat "$winetricks_output_file" >> "$LOG_FILE"
-        log "  ✓ winetricks VC++ Installation erfolgreich"
-        echo "  ✓ VC++ Runtimes erfolgreich installiert"
+        if [ "$LANG_CODE" = "de" ]; then
+            log "  ✓ winetricks VC++ Installation erfolgreich"
+            echo -e "${C_GREEN}  ✓ VC++ Runtimes erfolgreich installiert${C_RESET}"
+        else
+            log "  ✓ winetricks VC++ installation successful"
+            echo -e "${C_GREEN}  ✓ VC++ Runtimes successfully installed${C_RESET}"
+        fi
     else
-        local winetricks_exit_code=$?
         cat "$winetricks_output_file" >> "$LOG_FILE"
-        log "  ⚠ winetricks VC++ Installation fehlgeschlagen (Exit-Code: $winetricks_exit_code)"
-        echo "  ⚠ winetricks VC++ Installation fehlgeschlagen - Installation kann trotzdem funktionieren"
+        if [ "$LANG_CODE" = "de" ]; then
+            log "  ⚠ winetricks VC++ Installation fehlgeschlagen (Exit-Code: $winetricks_exit_code)"
+            echo -e "${C_YELLOW}  ⚠ winetricks VC++ Installation fehlgeschlagen - Installation kann trotzdem funktionieren${C_RESET}"
+        else
+            log "  ⚠ winetricks VC++ installation failed (Exit code: $winetricks_exit_code)"
+            echo -e "${C_YELLOW}  ⚠ winetricks VC++ installation failed - installation may still work${C_RESET}"
+        fi
     fi
     
     rm -f "$winetricks_output_file" 2>/dev/null || true
     
     log "$MSG_FONTS"
-    winetricks -q atmlib corefonts fontsmooth=rgb >> "$LOG_FILE" 2>&1
+    if [ "$LANG_CODE" = "de" ]; then
+        echo -ne "${C_YELLOW}  → Installiere Schriftarten und Bibliotheken...${C_RESET} "
+    else
+        echo -ne "${C_YELLOW}  → Installing fonts and libraries...${C_RESET} "
+    fi
+    winetricks -q atmlib corefonts fontsmooth=rgb >> "$LOG_FILE" 2>&1 &
+    local fonts_pid=$!
+    spinner $fonts_pid
+    wait $fonts_pid
+    echo ""
     
     log "$MSG_XML"
-    winetricks -q msxml3 msxml6 gdiplus >> "$LOG_FILE" 2>&1
+    if [ "$LANG_CODE" = "de" ]; then
+        echo -ne "${C_YELLOW}  → Installiere XML und GDI+ Komponenten...${C_RESET} "
+    else
+        echo -ne "${C_YELLOW}  → Installing XML and GDI+ components...${C_RESET} "
+    fi
+    winetricks -q msxml3 msxml6 gdiplus >> "$LOG_FILE" 2>&1 &
+    local xml_pid=$!
+    spinner $xml_pid
+    wait $xml_pid
+    echo ""
     
     # OPTIMIZATION: For newer versions (2021+) additional components
     # CRITICAL: Protect PS_VERSION with ${PS_VERSION:-}
     if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
-        log "  → Installiere zusätzliche Komponenten für ${PS_VERSION:-unknown}..."
+        if [ "$LANG_CODE" = "de" ]; then
+            log "  → Installiere zusätzliche Komponenten für ${PS_VERSION:-unknown}..."
+            echo -ne "${C_YELLOW}  → Installiere zusätzliche Komponenten für ${PS_VERSION:-unknown}...${C_RESET} "
+        else
+            log "  → Installing additional components for ${PS_VERSION:-unknown}..."
+            echo -ne "${C_YELLOW}  → Installing additional components for ${PS_VERSION:-unknown}...${C_RESET} "
+        fi
         # dotnet48 wird für neuere Photoshop-Versionen benötigt
-        winetricks -q dotnet48 >> "$LOG_FILE" 2>&1 || log "  ⚠ dotnet48 Installation fehlgeschlagen (optional)"
+        winetricks -q dotnet48 >> "$LOG_FILE" 2>&1 &
+        local dotnet_pid=$!
+        spinner $dotnet_pid
+        wait $dotnet_pid || log "  ⚠ dotnet48 Installation fehlgeschlagen (optional)"
         # vcrun2019 für neuere Versionen (optional)
-        winetricks -q vcrun2019 >> "$LOG_FILE" 2>&1 || log "  ⚠ vcrun2019 Installation fehlgeschlagen (optional)"
+        winetricks -q vcrun2019 >> "$LOG_FILE" 2>&1 &
+        local vcrun_pid=$!
+        spinner $vcrun_pid
+        wait $vcrun_pid || log "  ⚠ vcrun2019 Installation fehlgeschlagen (optional)"
+        echo ""
     fi
     
     # Workaround für bekannte Wine-Probleme (GitHub Issue #34)
@@ -1639,15 +1894,26 @@ function install_photoshopSE() {
     PS_INSTALL_PATH=$(get_photoshop_install_path "$PS_VERSION")
     PS_PREFS_PATH=$(get_photoshop_prefs_path "$PS_VERSION")
     
-    log "═══════════════════════════════════════════════════════════════"
-    log "Photoshop Installation gestartet: $(date '+%Y-%m-%d %H:%M:%S')"
-    log "Erkannte Version: $PS_VERSION"
-    log "Installations-Pfad: $PS_INSTALL_PATH"
-    log "Log-Datei: $LOG_FILE"
-    log "═══════════════════════════════════════════════════════════════"
-    log ""
+    # Colorful header (like setup.sh banner)
+    echo ""
+    echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+    echo -e "${C_MAGENTA}           Photoshop CC Installation${C_RESET}"
+    echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+    echo ""
     
-    echo "Erkannte Photoshop-Version: $PS_VERSION"
+    # Log detailed info (not shown to user)
+    log_debug "Photoshop Installation gestartet: $(date '+%Y-%m-%d %H:%M:%S')"
+    log_debug "Erkannte Version: $PS_VERSION"
+    log_debug "Installations-Pfad: $PS_INSTALL_PATH"
+    log_debug "Log-Datei: $LOG_FILE"
+    
+    # Show version to user with color
+    if [ "$LANG_CODE" = "de" ]; then
+        echo -e "${C_GREEN}Erkannte Photoshop-Version: ${C_YELLOW}$PS_VERSION${C_RESET}"
+    else
+        echo -e "${C_GREEN}Detected Photoshop Version: ${C_YELLOW}$PS_VERSION${C_RESET}"
+    fi
+    echo ""
     
     # Verwende das lokale Adobe Photoshop Installationspaket
     # Use project root directory (already determined at top of script)
@@ -1855,9 +2121,33 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
         "$WINE_PREFIX/drive_c/users/$USER/PhotoshopSE"
     )
     
+    # After installation, check which version was actually installed
+    local actual_version=""
     for ps_path in "${possible_paths[@]}"; do
         if [ -d "$ps_path" ]; then
             show_message "$MSG_FOUND_IN $ps_path"
+            
+            # Detect actual installed version from directory name
+            local dirname=$(basename "$ps_path")
+            if [[ "$dirname" =~ "2022" ]]; then
+                actual_version="2022"
+            elif [[ "$dirname" =~ "2021" ]]; then
+                actual_version="2021"
+            elif [[ "$dirname" =~ "CC 2019" ]] || [[ "$dirname" =~ "2019" ]]; then
+                actual_version="CC 2019"
+            fi
+            
+            # Update PS_VERSION if different from detected
+            if [ -n "$actual_version" ] && [ "$actual_version" != "$PS_VERSION" ]; then
+                if [ "$LANG_CODE" = "de" ]; then
+                    log_info "Tatsächlich installierte Version: $actual_version (vorher erkannt: $PS_VERSION)"
+                else
+                    log_info "Actually installed version: $actual_version (previously detected: $PS_VERSION)"
+                fi
+                PS_VERSION="$actual_version"
+                PS_INSTALL_PATH=$(get_photoshop_install_path "$PS_VERSION")
+                PS_PREFS_PATH=$(get_photoshop_prefs_path "$PS_VERSION")
+            fi
             
             # Entferne problematische Plugins (GitHub Issues #12, #56, #78)
             # JavaScript-Extensions (CEP) funktionieren nicht richtig in Wine/Proton
