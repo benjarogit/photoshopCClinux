@@ -115,7 +115,7 @@ for path in "${POSSIBLE_PATHS[@]}"; do
 done
 
 if [ -z "$PHOTOSHOP_EXE" ]; then
-    notify-send "Photoshop CC" "Photoshop.exe nicht gefunden! Überprüfe die Installation." -i "error"
+    notify-send "Photoshop" "Photoshop.exe nicht gefunden! Überprüfe die Installation." -i "error"
     echo "═══════════════════════════════════════════════════════════════"
     echo "FEHLER: Photoshop.exe nicht in folgenden Pfaden gefunden:"
     echo "═══════════════════════════════════════════════════════════════"
@@ -129,10 +129,16 @@ if [ -z "$PHOTOSHOP_EXE" ]; then
 fi
 
 echo "═══════════════════════════════════════════════════════════════"
-echo "           Adobe Photoshop CC - Linux Launcher"
+echo "           Adobe Photoshop - Linux Launcher"
 echo "═══════════════════════════════════════════════════════════════"
 echo "Photoshop-Pfad: $PHOTOSHOP_EXE"
 echo "Wine-Prefix: $WINE_PREFIX"
+# Show which Wine version is being used
+if [ -n "${WINE_VERSION_INFO:-}" ] && [ -n "$WINE_VERSION_INFO" ]; then
+    echo "Wine-Version: Proton GE ($WINE_VERSION_INFO)"
+else
+    echo "Wine-Version: Wine Standard"
+fi
 echo ""
 echo "Tipps bei Problemen:"
 echo "  - Beim ersten Start kann es 1-2 Minuten dauern"
@@ -144,7 +150,7 @@ echo ""
 # WINAPPS-TECHNIK: Progress-Indikator und Status-Notification
 echo ""
 echo "🔄 Photoshop wird gestartet..."
-notify-send "Photoshop CC" "Photoshop CC wird gestartet..." -i "photoshopicon" 2>/dev/null || true
+notify-send "Photoshop" "Photoshop wird gestartet..." -i "photoshopicon" 2>/dev/null || true
 
 # WINAPPS-TECHNIQUE: Pass files (if passed as parameters)
 # Convert Linux paths to Windows paths for Wine

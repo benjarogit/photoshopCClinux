@@ -394,11 +394,40 @@ function launcher() {
         error "desktop entry Not Found"
     fi
 
+    # Create desktop shortcut (copy to Desktop directory)
+    local desktop_dir=""
+    if [ -n "${XDG_DESKTOP_DIR:-}" ] && [ -d "$XDG_DESKTOP_DIR" ]; then
+        desktop_dir="$XDG_DESKTOP_DIR"
+    elif command -v xdg-user-dir >/dev/null 2>&1; then
+        desktop_dir=$(xdg-user-dir DESKTOP 2>/dev/null || echo "")
+    fi
+    # Fallback: Common desktop directory names
+    if [ -z "$desktop_dir" ] || [ ! -d "$desktop_dir" ]; then
+        for dir in "$HOME/Desktop" "$HOME/Schreibtisch" "$HOME/desktop" "$HOME/schreibtisch"; do
+            if [ -d "$dir" ]; then
+                desktop_dir="$dir"
+                break
+            fi
+        done
+    fi
+    if [ -n "$desktop_dir" ] && [ -d "$desktop_dir" ]; then
+        cp "$desktop_entry_dest" "$desktop_dir/photoshop.desktop" 2>/dev/null && chmod +x "$desktop_dir/photoshop.desktop" 2>/dev/null || true
+        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}Desktop-Verknüpfung${C_RESET} erstellt"
+    fi
+
     #change photoshop icon of desktop entry
-    local entry_icon="../images/AdobePhotoshop-icon.png"
+    # CRITICAL: Find icon using PROJECT_ROOT or SCRIPT_DIR
+    local entry_icon=""
+    if [ -n "${PROJECT_ROOT:-}" ] && [ -f "${PROJECT_ROOT}/images/AdobePhotoshop-icon.png" ]; then
+        entry_icon="${PROJECT_ROOT}/images/AdobePhotoshop-icon.png"
+    elif [ -n "${SCRIPT_DIR:-}" ] && [ -f "${SCRIPT_DIR}/../images/AdobePhotoshop-icon.png" ]; then
+        entry_icon="$(cd "${SCRIPT_DIR}/.." && pwd)/images/AdobePhotoshop-icon.png"
+    elif [ -f "$(dirname "$(dirname "$SCR_PATH")")/images/AdobePhotoshop-icon.png" ]; then
+        entry_icon="$(cd "$(dirname "$(dirname "$SCR_PATH")")" && pwd)/images/AdobePhotoshop-icon.png"
+    fi
     local launch_icon="$launcher_dest/AdobePhotoshop-icon.png"
 
-    if [ -f "$entry_icon" ]; then
+    if [ -n "$entry_icon" ] && [ -f "$entry_icon" ]; then
         cp "$entry_icon" "$launcher_dest" || error "can't copy icon image"
         # CRITICAL: sed -i GNU/BusyBox compatibility + security
         # CRITICAL: Escaping for sed pattern/replacement
@@ -456,7 +485,41 @@ function launcher() {
                 rm -f "$tmp_file" 2>/dev/null || true
             fi
         }
+        # Copy icon to system icon directory for better compatibility
+        local icon_name="photoshop"
+        local icon_dirs=(
+            "$HOME/.local/share/icons/hicolor/256x256/apps"
+            "$HOME/.local/share/icons/hicolor/48x48/apps"
+        )
+        for icon_dir in "${icon_dirs[@]}"; do
+            mkdir -p "$icon_dir" 2>/dev/null || true
+            if [ "$icon_dir" = "$HOME/.local/share/icons/hicolor/48x48/apps" ]; then
+                # Try to resize for 48x48, fallback to copy if convert not available
+                if command -v convert >/dev/null 2>&1; then
+                    convert "$entry_icon" -resize 48x48 "$icon_dir/${icon_name}.png" 2>/dev/null || cp "$entry_icon" "$icon_dir/${icon_name}.png" 2>/dev/null || true
+                else
+                    cp "$entry_icon" "$icon_dir/${icon_name}.png" 2>/dev/null || true
+                fi
+            else
+                cp "$entry_icon" "$icon_dir/${icon_name}.png" 2>/dev/null || true
+            fi
+        done
+        
+        # Update icon cache
+        if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+            gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+        fi
+        if command -v kbuildsycoca4 >/dev/null 2>&1; then
+            kbuildsycoca4 --noincremental 2>/dev/null || true
+        fi
+        
+        # Use absolute path for icon (more reliable than icon name)
+        # Some desktop environments (especially KDE) work better with absolute paths
         safe_sed_replace "$desktop_entry_dest" "photoshopicon" "$launch_icon" || error "can't edit desktop entry"
+        # Also update desktop shortcut if it exists
+        if [ -n "${desktop_dir:-}" ] && [ -f "${desktop_dir}/photoshop.desktop" ]; then
+            safe_sed_replace "${desktop_dir}/photoshop.desktop" "photoshopicon" "$launch_icon" 2>/dev/null || true
+        fi
         safe_sed_replace "$launcher_dest/launcher.sh" "photoshopicon" "$launch_icon" || error "can't edit launcher script"
     else
         warning "Icon not found, using default icon"
@@ -840,6 +903,8 @@ function save_paths() {
     local datafile="$HOME/.psdata.txt"
     echo "$SCR_PATH" > "$datafile"
     echo "$CACHE_PATH" >> "$datafile"
+    # Save Wine version info (PROTON_PATH if Proton GE was used, empty if Wine Standard)
+    echo "${PROTON_PATH:-}" >> "$datafile"
     unset datafile
 }
 
@@ -876,7 +941,10 @@ function load_paths() {
     
     # Load paths and validate they are not empty
     SCR_PATH=$(head -n 1 "$datafile" 2>/dev/null)
-    CACHE_PATH=$(tail -n 1 "$datafile" 2>/dev/null)
+    CACHE_PATH=$(sed -n '2p' "$datafile" 2>/dev/null)
+    # Load Wine version info (line 3, optional - may not exist in old installations)
+    # If line 3 exists and is not empty, it contains PROTON_PATH (or empty for Wine Standard)
+    WINE_VERSION_INFO=$(sed -n '3p' "$datafile" 2>/dev/null || echo "")
     
     if [ -z "$SCR_PATH" ]; then
         echo "ERROR: Installation path (SCR_PATH) is empty or corrupted in $datafile"

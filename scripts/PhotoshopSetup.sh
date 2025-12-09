@@ -147,8 +147,24 @@ run_with_spinner() {
     shift
     local cmd="$@"
     
-    # Run command in background and capture PID
-    eval "$cmd" >> "$LOG_FILE" 2>&1 &
+    # CRITICAL: Export environment variables before running command
+    # This ensures winetricks uses the correct Wine binary and WINEPREFIX
+    local env_vars=""
+    if [ -n "${WINEPREFIX:-}" ]; then
+        env_vars="WINEPREFIX=\"$WINEPREFIX\" "
+    fi
+    if [ -n "${WINEARCH:-}" ]; then
+        env_vars="${env_vars}WINEARCH=\"$WINEARCH\" "
+    fi
+    if [ -n "${PROTON_PATH:-}" ]; then
+        env_vars="${env_vars}PROTON_PATH=\"$PROTON_PATH\" "
+    fi
+    if [ -n "${PROTON_VERB:-}" ]; then
+        env_vars="${env_vars}PROTON_VERB=\"$PROTON_VERB\" "
+    fi
+    
+    # Run command in background with environment variables and capture PID
+    eval "${env_vars}$cmd" >> "$LOG_FILE" 2>&1 &
     local pid=$!
     
     # Show spinner while command runs
@@ -640,7 +656,8 @@ select_wine_version() {
                         fi
                         
                         log "  → Versuche Installation über AUR ($aur_helper)..."
-                        log_command $aur_helper -S proton-ge-custom-bin
+                        # Use --noconfirm to avoid hanging on user prompts
+                        log_command $aur_helper -S --noconfirm proton-ge-custom-bin
                         if [ $? -eq 0 ]; then
                             # Prüfe Installationspfad
                             local proton_ge_path=$(pacman -Ql proton-ge-custom-bin 2>/dev/null | grep "files/bin/wine$" | head -1 | awk '{print $2}' | xargs dirname | xargs dirname | xargs dirname)
@@ -1012,11 +1029,13 @@ select_wine_version() {
                     echo ""
                     local install_success=0
                     if command -v yay &> /dev/null; then
-                        if yay -S proton-ge-custom-bin; then
+                        # Use --noconfirm to avoid hanging on user prompts
+                        if yay -S --noconfirm proton-ge-custom-bin; then
                             install_success=1
                         fi
                     elif command -v paru &> /dev/null; then
-                        if paru -S proton-ge-custom-bin; then
+                        # Use --noconfirm to avoid hanging on user prompts
+                        if paru -S --noconfirm proton-ge-custom-bin; then
                             install_success=1
                         fi
                     else
@@ -1384,12 +1403,239 @@ select_wine_version() {
         fi
         
         if [ -z "$proton_ge_path" ]; then
-            # Proton GE is installed but path not found or is Steam directory
-            # Use standard Wine but set PROTON_PATH="system" for launcher compatibility
-            export PROTON_PATH="system"
-            log "⚠ Proton GE (system) - Pfad nicht gefunden oder Steam-Verzeichnis"
-            log "  → Verwende Standard-Wine (Proton GE ist installiert, aber Pfad nicht verfügbar)"
-            log "  → Hinweis: System-weites Proton GE (nicht Steam) wird empfohlen für beste Kompatibilität"
+            # Proton GE is selected but path not found - try to install it automatically
+            if [ "$LANG_CODE" = "de" ]; then
+                log_warning "Proton GE (system) - Pfad nicht gefunden!"
+                log "${C_YELLOW}→${C_RESET} ${C_CYAN}Starte automatische Installation von Proton GE...${C_RESET}"
+                echo ""
+                echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+                echo -e "${C_CYAN}           Proton GE wird jetzt installiert${C_RESET}"
+                echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+                echo ""
+            else
+                log_warning "Proton GE (system) - Path not found!"
+                log "${C_YELLOW}→${C_RESET} ${C_CYAN}Starting automatic Proton GE installation...${C_RESET}"
+                echo ""
+                echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+                echo -e "${C_CYAN}           Installing Proton GE now${C_RESET}"
+                echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+                echo ""
+            fi
+            
+            # Call the installation function (same logic as in detect_all_wine_versions)
+            local install_success=0
+            local proton_ge_install_path=""
+            
+            # OPTION 1: Try AUR package (Arch-based)
+            if command -v yay &> /dev/null || command -v paru &> /dev/null; then
+                local aur_helper=""
+                if command -v yay &> /dev/null; then
+                    aur_helper="yay"
+                else
+                    aur_helper="paru"
+                fi
+                
+                if [ "$LANG_CODE" = "de" ]; then
+                    show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}Versuche Installation über AUR ($aur_helper)...${C_RESET}"
+                else
+                    show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}Trying installation via AUR ($aur_helper)...${C_RESET}"
+                fi
+                # Use --noconfirm to avoid hanging on user prompts
+                log_command $aur_helper -S --noconfirm proton-ge-custom-bin
+                if [ $? -eq 0 ]; then
+                    # Check installation path
+                    local installed_path=$(pacman -Ql proton-ge-custom-bin 2>/dev/null | grep "files/bin/wine$" | head -1 | awk '{print $2}' | xargs dirname | xargs dirname | xargs dirname)
+                    if [ -n "$installed_path" ] && [ -d "$installed_path" ]; then
+                        if [[ "$installed_path" =~ steam ]]; then
+                            log "⚠ AUR-Paket installiert in Steam-Verzeichnis - versuche manuelle Installation"
+                            install_success=0
+                        else
+                            log "${C_GREEN}✓${C_RESET} ${C_CYAN}Proton GE system-weit installiert: $installed_path${C_RESET}"
+                            show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}Proton GE system-weit installiert${C_RESET}"
+                            install_success=1
+                            proton_ge_install_path="$installed_path"
+                        fi
+                    fi
+                fi
+            fi
+            
+            # OPTION 2: Manual installation (universal for all Linux distributions)
+            if [ $install_success -eq 0 ]; then
+                if [ "$LANG_CODE" = "de" ]; then
+                    show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installiere Proton GE manuell system-weit...${C_RESET}"
+                else
+                    show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installing Proton GE manually system-wide...${C_RESET}"
+                fi
+                
+                # Determine installation path (system-wide, not Steam)
+                local install_base=""
+                if [ -w "/usr/local/share" ]; then
+                    install_base="/usr/local/share/proton-ge"
+                elif [ -w "$HOME/.local/share" ]; then
+                    install_base="$HOME/.local/share/proton-ge"
+                else
+                    install_base="$HOME/.proton-ge"
+                fi
+                
+                log "  → Installationspfad: $install_base"
+                mkdir -p "$install_base" 2>/dev/null || {
+                    log_error "Konnte Installationsverzeichnis nicht erstellen: $install_base"
+                    install_success=0
+                }
+                
+                if [ -d "$install_base" ]; then
+                    # Download latest Proton GE version from GitHub
+                    if [ "$LANG_CODE" = "de" ]; then
+                        show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}Lade neueste Proton GE Version herunter...${C_RESET}"
+                    else
+                        show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}Downloading latest Proton GE version...${C_RESET}"
+                    fi
+                    
+                    # GitHub API: Get latest release version
+                    local latest_version=$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | head -1)
+                    
+                    if [ -z "$latest_version" ]; then
+                        latest_version="GE-Proton10-26"  # Fallback version
+                        log "  ⚠ Konnte neueste Version nicht ermitteln, verwende Fallback: $latest_version"
+                    else
+                        log "  → Neueste Version gefunden: $latest_version"
+                    fi
+                    
+                    # Download URL
+                    local download_url="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${latest_version}/${latest_version}.tar.gz"
+                    local download_file="$install_base/${latest_version}.tar.gz"
+                    
+                    # CRITICAL: Download URL validation
+                    local download_ok=0
+                    if [[ "$download_url" =~ ^https://(www\.)?github\.com ]]; then
+                        log_debug "Download von: $download_url"
+                        if [ "$LANG_CODE" = "de" ]; then
+                            show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}Download läuft...${C_RESET}"
+                        else
+                            show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}Downloading...${C_RESET}"
+                        fi
+                        
+                        # Download with progress
+                        if command -v wget &> /dev/null; then
+                            wget -q --show-progress -O "$download_file" "$download_url" 2>&1 | tee -a "$LOG_FILE"
+                            [ $? -eq 0 ] && [ -f "$download_file" ] && download_ok=1
+                        elif command -v curl &> /dev/null; then
+                            curl -L --progress-bar -o "$download_file" "$download_url" 2>&1 | tee -a "$LOG_FILE"
+                            [ $? -eq 0 ] && [ -f "$download_file" ] && download_ok=1
+                        else
+                            log_error "wget oder curl nicht gefunden - Download nicht möglich"
+                        fi
+                    fi
+                    
+                    if [ $download_ok -eq 1 ] && [ -f "$download_file" ]; then
+                        # Extract
+                        if [ "$LANG_CODE" = "de" ]; then
+                            show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}Entpacke Proton GE...${C_RESET}"
+                        else
+                            show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}Extracting Proton GE...${C_RESET}"
+                        fi
+                        tar -xzf "$download_file" -C "$install_base" 2>&1 | tee -a "$LOG_FILE"
+                        if [ $? -eq 0 ]; then
+                            # Check if installation successful
+                            local extracted_dir="$install_base/${latest_version}"
+                            if [ -d "$extracted_dir" ] && [ -f "$extracted_dir/files/bin/wine" ]; then
+                                log "${C_GREEN}✓${C_RESET} ${C_CYAN}Proton GE manuell installiert: $extracted_dir${C_RESET}"
+                                show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}Proton GE system-weit installiert${C_RESET}"
+                                install_success=1
+                                proton_ge_install_path="$extracted_dir"
+                                
+                                # Create symlink for easier access
+                                if [ -d "$install_base" ]; then
+                                    ln -sfn "$extracted_dir" "$install_base/current" 2>/dev/null || true
+                                fi
+                            else
+                                log_error "Installation unvollständig - wine-Binary nicht gefunden"
+                                install_success=0
+                            fi
+                        else
+                            log_error "Entpacken fehlgeschlagen"
+                            install_success=0
+                        fi
+                        
+                        # Delete download file
+                        rm -f "$download_file" 2>/dev/null || true
+                    else
+                        install_success=0
+                    fi
+                fi
+            fi
+            
+            # After installation, try to find the path again
+            if [ $install_success -eq 1 ] && [ -n "$proton_ge_install_path" ]; then
+                proton_ge_path="$proton_ge_install_path"
+                show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}Proton GE erfolgreich installiert und gefunden${C_RESET}"
+                log_debug "Proton GE Pfad: $proton_ge_path"
+                
+                # CRITICAL: Set PROTON_PATH and configure environment (same as normal path detection)
+                if [ -n "$proton_ge_path" ] && [ -f "$proton_ge_path/files/bin/wine" ]; then
+                    # CRITICAL: Prevent PATH manipulation - validate proton_ge_path
+                    if [[ ! "$proton_ge_path" =~ ^/tmp|^/var/tmp|^/dev/shm|^/proc ]]; then
+                        # CRITICAL: Additional validation - check that wine binary is real
+                        if [ -x "$proton_ge_path/files/bin/wine" ] && [ ! -L "$proton_ge_path/files/bin/wine" ]; then
+                            # CRITICAL: Extend PATH, but ensure no . in PATH
+                            local safe_path="$proton_ge_path/files/bin"
+                            # Remove . from PATH if present
+                            local clean_path=$(echo "$PATH" | tr ':' '\n' | grep -v '^\.$' | grep -v '^$' | tr '\n' ':' | sed 's/:$//')
+                            export PATH="$safe_path:${clean_path:-/usr/local/bin:/usr/bin:/bin}"
+                            export PROTON_PATH="$proton_ge_path"
+                            export PROTON_VERB=1
+                            log "✓ Proton GE (system) konfiguriert: $proton_ge_path"
+                            log_debug "Proton GE Wine-Binary: $proton_ge_path/files/bin/wine"
+                        else
+                            log_error "Proton GE wine binary is not safe (symlink or not executable): $proton_ge_path/files/bin/wine"
+                            log "Using standard Wine instead of unsafe Proton GE"
+                            export PROTON_PATH=""
+                        fi
+                    else
+                        log_error "Proton GE path is in unsafe directory (security risk): $proton_ge_path"
+                        log "Using standard Wine instead of unsafe Proton GE path"
+                        export PROTON_PATH=""
+                    fi
+                fi
+            elif [ $install_success -eq 0 ]; then
+                # Installation failed - ask user
+                if [ "$LANG_CODE" = "de" ]; then
+                    log_error "Automatische Proton GE Installation fehlgeschlagen"
+                    echo ""
+                    echo -e "${C_YELLOW}⚠${C_RESET} ${C_RED}Automatische Proton GE Installation fehlgeschlagen${C_RESET}"
+                    echo ""
+                    echo "Du kannst Proton GE manuell installieren:"
+                    echo "  1. Lade von: https://github.com/GloriousEggroll/proton-ge-custom/releases"
+                    echo "  2. Entpacke nach: $HOME/.local/share/proton-ge/"
+                    echo "  3. Oder verwende Standard-Wine (funktioniert auch)"
+                    echo ""
+                    log_prompt "   [J] Ja - Mit Standard-Wine fortfahren  [N] Nein - Abbrechen [J/n]: "
+                    IFS= read -r -p "   [J] Ja - Mit Standard-Wine fortfahren  [N] Nein - Abbrechen [J/n]: " continue_with_wine
+                    log_input "$continue_with_wine"
+                else
+                    log_error "Automatic Proton GE installation failed"
+                    echo ""
+                    echo -e "${C_YELLOW}⚠${C_RESET} ${C_RED}Automatic Proton GE installation failed${C_RESET}"
+                    echo ""
+                    echo "You can install Proton GE manually:"
+                    echo "  1. Download from: https://github.com/GloriousEggroll/proton-ge-custom/releases"
+                    echo "  2. Extract to: $HOME/.local/share/proton-ge/"
+                    echo "  3. Or use Standard Wine (works too)"
+                    echo ""
+                    log_prompt "   [Y] Yes - Continue with Standard Wine  [N] No - Cancel [Y/n]: "
+                    IFS= read -r -p "   [Y] Yes - Continue with Standard Wine  [N] No - Cancel [Y/n]: " continue_with_wine
+                    log_input "$continue_with_wine"
+                fi
+                
+                if [[ "$continue_with_wine" =~ ^[Nn]$ ]]; then
+                    error "$([ "$LANG_CODE" = "de" ] && echo "Installation abgebrochen" || echo "Installation cancelled")"
+                fi
+                
+                # User chose to continue with Standard-Wine - clear PROTON_PATH
+                export PROTON_PATH=""
+                log "${C_GREEN}✓${C_RESET} ${C_CYAN}Verwende Standard-Wine (Proton GE Installation fehlgeschlagen)${C_RESET}"
+                return 0
+            fi
         fi
     else
         # Standard Wine or Wine Staging
@@ -1654,6 +1900,8 @@ function main() {
     log_environment
     
     # Confirm selection
+    # CRITICAL: Initialize PROTON_PATH if not set (for set -u)
+    export PROTON_PATH="${PROTON_PATH:-}"
     if [ -n "$PROTON_PATH" ] && [ "$PROTON_PATH" != "system" ]; then
         show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$([ "$LANG_CODE" = "de" ] && echo "Proton GE wird verwendet (bessere Kompatibilität)" || echo "Using Proton GE (better compatibility)")${C_RESET}"
         log "Proton GE aktiviert: $PROTON_PATH"
@@ -1671,6 +1919,13 @@ function main() {
     
     #create new wine prefix for photoshop
     rmdir_if_exist $WINE_PREFIX
+    
+    # CRITICAL: Kill any existing wineserver that might be using the wrong Wine binary
+    # This prevents "version mismatch" errors when switching between Wine Standard and Proton GE
+    if command -v wineserver >/dev/null 2>&1; then
+        wineserver -k 2>/dev/null || true
+        sleep 1
+    fi
     
     #export necessary variable for wine
     export_var
@@ -1704,23 +1959,54 @@ function main() {
         sleep 2
     fi
     
-    "$winecfg_binary" 2> "$SCR_PATH/wine-error.log"
-    if [ $? -eq 0 ];then
+    # CRITICAL: Initialize Wine prefix properly
+    # Use wineboot to ensure prefix is fully initialized before winecfg
+    log_debug "Initializing Wine prefix with wineboot..."
+    "$wine_binary" wineboot -u 2>> "$SCR_PATH/wine-error.log" || {
+        log_warning "wineboot failed, but continuing..."
+    }
+    
+    # Wait a moment for prefix initialization
+    sleep 1
+    
+    # Now run winecfg to configure the prefix
+    "$winecfg_binary" 2>> "$SCR_PATH/wine-error.log"
+    local winecfg_exit=$?
+    
+    # Wait a moment for winecfg to complete
+    sleep 1
+    
+    # CRITICAL: Check if user.reg was created, if not, try wineboot again
+    if [ ! -f "$WINE_PREFIX/user.reg" ]; then
+        log_warning "user.reg not found after winecfg, trying wineboot again..."
+        "$wine_binary" wineboot -u 2>> "$SCR_PATH/wine-error.log" || true
+        sleep 2
+    fi
+    
+    if [ $winecfg_exit -eq 0 ] && [ -f "$WINE_PREFIX/user.reg" ]; then
         if [ "$LANG_CODE" = "de" ]; then
             show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}Prefix konfiguriert...${C_RESET}"
         else
             show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}Prefix configured...${C_RESET}"
         fi
-        sleep 2
+        sleep 1
+    elif [ -f "$WINE_PREFIX/user.reg" ]; then
+        # Prefix exists even if winecfg had warnings
+        if [ "$LANG_CODE" = "de" ]; then
+            show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}Prefix konfiguriert...${C_RESET}"
+        else
+            show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}Prefix configured...${C_RESET}"
+        fi
+        sleep 1
     else
-        error "prefix config failed :("
+        error "Prefix initialization failed - user.reg not created. Check wine-error.log for details."
     fi
     
-    if [ -f "$WINE_PREFIX/user.reg" ];then
+    if [ -f "$WINE_PREFIX/user.reg" ]; then
         #add dark mod
         set_dark_mod
     else
-        error "user.reg Not Found :("
+        error "user.reg Not Found after initialization :("
     fi
    
     #create resources directory 
@@ -1734,7 +2020,11 @@ function main() {
     # Setze Windows-Version basierend auf erkannte Photoshop-Version
     # OPTIMIERUNG: Neuere Versionen (2021+) funktionieren besser mit Windows 10
     # Photoshop funktioniert auch mit Windows 10 (bessere Kompatibilität)
-    log "${C_YELLOW}→${C_RESET} ${C_CYAN}$MSG_SET_WIN10${C_RESET}"
+    if [ "$LANG_CODE" = "de" ]; then
+        show_message "${C_YELLOW}→${C_RESET} ${C_CYAN}$MSG_SET_WIN10${C_RESET}"
+    else
+        show_message "${C_YELLOW}→${C_RESET} ${C_CYAN}$MSG_SET_WIN10${C_RESET}"
+    fi
     
     # Für alle Versionen verwende Windows 10 (beste Kompatibilität)
     # KRITISCH: PS_VERSION mit ${PS_VERSION:-} schützen (kann noch nicht gesetzt sein)
@@ -1743,7 +2033,44 @@ function main() {
     else
         log "${C_YELLOW}  →${C_RESET} ${C_GRAY}Verwende Windows 10 (auch für ${PS_VERSION:-unknown} kompatibel)${C_RESET}"
     fi
-    winetricks -q win10 >> "$LOG_FILE" 2>&1
+    
+    # CRITICAL: Use winetricks with spinner and ensure it uses the correct Wine binary
+    # winetricks automatically uses the Wine binary from PATH (which should be Proton GE if selected)
+    # CRITICAL: WINEPREFIX should already be set by export_var(), but run_with_spinner will ensure it
+    # CRITICAL: Add timeout to prevent hanging (winetricks can hang on version mismatch)
+    log_debug "Setting Windows version to Windows 10 via winetricks..."
+    log_debug "WINEPREFIX: ${WINEPREFIX:-not set}"
+    log_debug "Wine binary: $(command -v wine 2>/dev/null || echo 'not found')"
+    
+    # CRITICAL: Ensure wineserver is killed before winetricks (prevents version mismatch)
+    if command -v wineserver >/dev/null 2>&1; then
+        log_debug "Killing wineserver before winetricks..."
+        wineserver -k 2>/dev/null || true
+        sleep 1
+    fi
+    
+    if [ "$LANG_CODE" = "de" ]; then
+        # Use timeout to prevent hanging (60 seconds should be enough for win10)
+        if command -v timeout >/dev/null 2>&1; then
+            run_with_spinner "Setze Windows-Version..." "timeout 60 winetricks -q win10"
+        else
+            run_with_spinner "Setze Windows-Version..." "winetricks -q win10"
+        fi
+    else
+        if command -v timeout >/dev/null 2>&1; then
+            run_with_spinner "Setting Windows version..." "timeout 60 winetricks -q win10"
+        else
+            run_with_spinner "Setting Windows version..." "winetricks -q win10"
+        fi
+    fi
+    
+    local win10_exit_code=$?
+    if [ $win10_exit_code -ne 0 ]; then
+        log_warning "winetricks -q win10 exited with code $win10_exit_code (may have timed out or failed)"
+        log_warning "Continuing anyway - Windows version may not be set correctly"
+    else
+        log_debug "Windows version set to Windows 10 successfully"
+    fi
     
     # Core components: Install VC++ Runtimes
     # Use winetricks (standard method, proven and reliable)
@@ -2253,6 +2580,10 @@ EOF
     notify-send "Photoshop CC" "Photoshop Installation abgeschlossen" -i "photoshop" 2>/dev/null || true
     log "Adobe Photoshop $PS_VERSION installiert..."
     
+    # CRITICAL: Save paths including Wine version info (PROTON_PATH) for uninstaller
+    # This must be called AFTER PROTON_PATH is set (which happens in select_wine_version)
+    save_paths
+    
     unset local_installer install_status possible_paths
 }
 
@@ -2283,7 +2614,7 @@ export WINE_METHOD
 
 # Call check_arg with filtered arguments (without --wine-standard/--proton-ge)
 check_arg "${filtered_args[@]}"
-save_paths
+# NOTE: save_paths() is called at the END of installation (after PROTON_PATH is set)
 main
 
 
