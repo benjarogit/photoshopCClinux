@@ -1998,18 +1998,28 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     if [ "$LANG_CODE" = "de" ]; then
         log "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installiere IE8 über winetricks (dauert 5-10 Minuten)...${C_RESET}"
         log "${C_GRAY}     (Standard-Installation für beste Kompatibilität mit Adobe Installer)${C_RESET}"
+        echo -ne "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installiere IE8 über winetricks (dauert 5-10 Minuten)...${C_RESET} "
     else
         log "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installing IE8 via winetricks (takes 5-10 minutes)...${C_RESET}"
         log "${C_GRAY}     (Standard installation for best compatibility with Adobe Installer)${C_RESET}"
+        echo -ne "${C_YELLOW}  →${C_RESET} ${C_CYAN}Installing IE8 via winetricks (takes 5-10 minutes)...${C_RESET} "
     fi
     
-    if winetricks -q ie8 >> "$LOG_FILE" 2>&1; then
+    winetricks -q ie8 >> "$LOG_FILE" 2>&1 &
+    local ie8_pid=$!
+    spinner $ie8_pid
+    wait $ie8_pid
+    local ie8_exit_code=$?
+    
+    if [ $ie8_exit_code -eq 0 ]; then
+        echo ""
         log "${C_GREEN}  ✓${C_RESET} ${C_CYAN}IE8 erfolgreich installiert${C_RESET}"
         # CRITICAL: IE8 resets Windows version to win7 - must be set back to win10!
         log "${C_YELLOW}  →${C_RESET} ${C_GRAY}Setze Windows-Version erneut auf Windows 10 (IE8 hat sie auf win7 zurückgesetzt)...${C_RESET}"
         winetricks -q win10 >> "$LOG_FILE" 2>&1 || log "${C_YELLOW}  ⚠${C_RESET} ${C_YELLOW}win10 konnte nicht erneut gesetzt werden${C_RESET}"
         log "${C_GREEN}  ✓${C_RESET} ${C_CYAN}Windows 10 erneut gesetzt${C_RESET}"
     else
+        echo ""
         log "${C_YELLOW}  ⚠${C_RESET} ${C_YELLOW}IE8 Installation fehlgeschlagen - verwende Workarounds${C_RESET}"
     fi
     
