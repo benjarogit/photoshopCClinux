@@ -166,33 +166,35 @@ function show_wine_selection_menu() {
         echo "            Wine/Proton Auswahl für Photoshop CC"
         echo "═══════════════════════════════════════════════════════════════"
         echo ""
-        echo "  [1a] Wine Standard installieren"
-        echo "  [1b] Proton GE installieren (empfohlen)"
-        echo "  [z]  Zurück zum Hauptmenü"
+        echo "  [1] Wine Standard installieren"
+        echo "  [2] Proton GE installieren (empfohlen)"
+        echo "  [3] Zurück zum Hauptmenü"
         echo ""
-        IFS= read -r -p "Wähle eine Option [1a/1b/z]: " wine_choice
+        IFS= read -r -p "Wähle eine Option [1-3]: " wine_choice
     else
         echo "═══════════════════════════════════════════════════════════════"
         echo "            Wine/Proton Selection for Photoshop CC"
         echo "═══════════════════════════════════════════════════════════════"
         echo ""
-        echo "  [1a] Install with Wine Standard"
-        echo "  [1b] Install with Proton GE (recommended)"
-        echo "  [z]  Back to main menu"
+        echo "  Choose a Wine version:"
         echo ""
-        IFS= read -r -p "Choose an option [1a/1b/z]: " wine_choice
+        echo "  [1] Install with Wine Standard"
+        echo "  [2] Install with Proton GE (recommended)"
+        echo "  [3] Back to main menu"
+        echo ""
+        IFS= read -r -p "Choose an option [1-3]: " wine_choice
     fi
     
     case "$wine_choice" in
-        1a|1A)
+        1)
             msg_run_photoshop
             run_script "$SCRIPT_DIR/scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh" --wine-standard
             ;;
-        1b|1B)
+        2)
             msg_run_photoshop
             run_script "$SCRIPT_DIR/scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh" --proton-ge
             ;;
-        z|Z|"")
+        3|"")
             main
             ;;
         *)
@@ -220,14 +222,6 @@ function main() {
 
     case "$answer" in
 
-    1a|1A)
-        msg_run_photoshop
-        run_script "$SCRIPT_DIR/scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh" --wine-standard
-        ;;
-    1b|1B)
-        msg_run_photoshop
-        run_script "$SCRIPT_DIR/scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh" --proton-ge
-        ;;
     1)
         # Show Wine selection submenu
         show_wine_selection_menu
@@ -458,14 +452,14 @@ function read_input() {
     while true ;do
         # KRITISCH: read -r verhindert Backslash-Interpretation
         IFS= read -r -p "$(msg_choose_option)" choose
-        # Accept 1-9, 1a, 1A, 1b, 1B for Wine selection
-        if [[ "$choose" =~ (^[1-9]$|^1[aAbB]$) ]];then
+        # Accept 1-9 for menu selection
+        if [[ "$choose" =~ ^[1-9]$ ]];then
             break
         fi
         if [ "$LANG_CODE" = "de" ]; then
-            warning "Wähle eine Zahl zwischen 1 und 9, oder 1a/1b für Wine-Auswahl"
+            warning "Wähle eine Zahl zwischen 1 und 9"
         else
-            warning "choose a number between 1 to 9, or 1a/1b for Wine selection"
+            warning "Choose a number between 1 and 9"
         fi
     done
 
@@ -545,7 +539,7 @@ function banner() {
     fi
     
     if [ "$LANG_CODE" = "de" ]; then
-        local opt1="1- Photoshop CC installieren        (1a=Wine, 1b=Proton)"
+        local opt1="1- Photoshop CC installieren"
         local opt2="2- Camera Raw v12 installieren"
         local opt3="3- System-Vorprüfung               (empfohlen)"
         local opt4="4- Fehlerbehebung                  (Troubleshoot)"
@@ -556,7 +550,7 @@ function banner() {
         local opt9="9- Beenden"
         local sys_label="System:"
     else
-        local opt1="1- Install photoshop CC            (1a=Wine, 1b=Proton)"
+        local opt1="1- Install photoshop CC"
         local opt2="2- Install camera raw v12"
         local opt3="3- Pre-installation check          (recommended)"
         local opt4="4- Troubleshooting                 (Fix issues)"
