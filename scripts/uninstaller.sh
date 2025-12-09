@@ -190,11 +190,19 @@ main() {
         "$HOME/.local/share/applications/photoshopCC.desktop"
     )
     
-    # Suche auch in Wine-Kategorien (z.B. ~/.local/share/applications/wine/Programs/)
+    # Search also in Wine categories (e.g., ~/.local/share/applications/wine/Programs/)
+    # CRITICAL: Wine creates desktop entries in wine/Programs/ subdirectories
     if [ -d "$HOME/.local/share/applications/wine" ]; then
         while IFS= read -r -d '' entry; do
             desktop_entries+=("$entry")
-        done < <(find "$HOME/.local/share/applications/wine" -name "*Photoshop*" -o -name "*photoshop*" -type f -print0 2>/dev/null || true)
+        done < <(find "$HOME/.local/share/applications/wine" -type f \( -name "*Photoshop*" -o -name "*photoshop*" \) -print0 2>/dev/null || true)
+    fi
+    
+    # Also search in wine/Programs/ directly (common location)
+    if [ -d "$HOME/.local/share/applications/wine/Programs" ]; then
+        while IFS= read -r -d '' entry; do
+            desktop_entries+=("$entry")
+        done < <(find "$HOME/.local/share/applications/wine/Programs" -type f \( -name "*Photoshop*" -o -name "*photoshop*" \) -print0 2>/dev/null || true)
     fi
     
     local found_any=false

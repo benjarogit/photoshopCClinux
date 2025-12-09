@@ -140,11 +140,15 @@ chmod +x setup.sh
 
 ```
 ┌─────────────────────────────────────────────┐
-│  1) install photoshop CC                    │
-│  2) install camera raw                      │
-│  3) configure wine prefix (winecfg)         │
-│  4) uninstall photoshop CC                  │
-│  5) exit                                    │
+│  1) Photoshop CC installieren              │
+│  2) Camera Raw v12 installieren            │
+│  3) System-Vorprüfung                       │
+│  4) Fehlerbehebung                          │
+│  5) Wine konfigurieren                      │
+│  6) Photoshop deinstallieren                │
+│  7) Internet: ON/OFF                        │
+│  8) Sprache: Deutsch/English                │
+│  9) Beenden                                 │
 └─────────────────────────────────────────────┘
 ```
 
