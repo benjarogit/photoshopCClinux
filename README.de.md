@@ -14,7 +14,9 @@
 > 
 > ✅ **Adobe Photoshop CC 2021 v22.0.0.35 x64** wurde erfolgreich getestet und funktioniert bestätigt mit der **Wine Standard** Installationsmethode.
 > 
-> ⚠️ **Proton GE Unterstützung**: Wir arbeiten aktiv an der Verbesserung der Proton GE Kompatibilität. Während Proton GE als Option verfügbar ist, wird es noch verfeinert und getestet. Für die stabilste Erfahrung empfehlen wir derzeit die **Wine Standard** Installation.
+> ✅ **Proton GE Unterstützung**: Proton GE Installation funktioniert jetzt erfolgreich! Benutzer können Photoshop mit Proton GE installieren und ausführen. Proton GE wird automatisch installiert, falls es nicht gefunden wird.
+> 
+> ⚠️ **Bekanntes Problem**: Icon-Anzeigeproblem in KDE Desktop-Umgebung - Icons erscheinen möglicherweise nicht im Startmenü oder Desktop-Verknüpfung. Workaround: Desktop-Sitzung neu starten oder abmelden und wieder anmelden.
 
 ![Photoshop on Linux](images/Screenshot.png)
 
