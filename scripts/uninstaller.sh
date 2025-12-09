@@ -182,12 +182,14 @@ main() {
     #delete desktop entry (alle Varianten finden und entfernen)
     msg_remove_desktop
     
-    # Suche nach allen möglichen Desktop-Einträgen
+    # Search for all possible desktop entries (menu entries)
     local desktop_entries=(
         "$HOME/.local/share/applications/photoshop.desktop"
         "$HOME/.local/share/applications/Adobe Photoshop CC 2019.desktop"
         "$HOME/.local/share/applications/Adobe Photoshop.desktop"
         "$HOME/.local/share/applications/photoshopCC.desktop"
+        "$HOME/.local/share/applications/Adobe Photoshop 2021.desktop"
+        "$HOME/.local/share/applications/Adobe Photoshop 2022.desktop"
     )
     
     # Search also in Wine categories (e.g., ~/.local/share/applications/wine/Programs/)
@@ -205,15 +207,49 @@ main() {
         done < <(find "$HOME/.local/share/applications/wine/Programs" -type f \( -name "*Photoshop*" -o -name "*photoshop*" \) -print0 2>/dev/null || true)
     fi
     
+    # Search for desktop icons (Desktop shortcuts)
+    # Desktop directory can be "Desktop" (English) or "Schreibtisch" (German)
+    local desktop_dirs=(
+        "$HOME/Desktop"
+        "$HOME/Schreibtisch"
+        "$HOME/desktop"
+        "$HOME/schreibtisch"
+    )
+    
+    local desktop_icons=()
+    for desktop_dir in "${desktop_dirs[@]}"; do
+        if [ -d "$desktop_dir" ]; then
+            while IFS= read -r -d '' icon; do
+                desktop_icons+=("$icon")
+            done < <(find "$desktop_dir" -type f \( -name "*Photoshop*" -o -name "*photoshop*" \) -print0 2>/dev/null || true)
+        fi
+    done
+    
     local found_any=false
+    
+    # Remove menu entries
     for entry in "${desktop_entries[@]}"; do
         if [ -f "$entry" ]; then
             if rm "$entry" 2>/dev/null; then
                 found_any=true
                 if [ "$LANG_CODE" = "de" ]; then
-                    log "Entfernt: $entry" 2>/dev/null || true
+                    log "Entfernt (Menü): $entry" 2>/dev/null || true
                 else
-                    log "Removed: $entry" 2>/dev/null || true
+                    log "Removed (menu): $entry" 2>/dev/null || true
+                fi
+            fi
+        fi
+    done
+    
+    # Remove desktop icons
+    for icon in "${desktop_icons[@]}"; do
+        if [ -f "$icon" ]; then
+            if rm "$icon" 2>/dev/null; then
+                found_any=true
+                if [ "$LANG_CODE" = "de" ]; then
+                    log "Entfernt (Desktop): $icon" 2>/dev/null || true
+                else
+                    log "Removed (desktop): $icon" 2>/dev/null || true
                 fi
             fi
         fi
