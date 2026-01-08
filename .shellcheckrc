@@ -1,0 +1,20 @@
+# ShellCheck Configuration for Photoshop CC Linux Installer
+# https://github.com/koalaman/shellcheck
+
+# Shell type
+shell=bash
+
+# Disable specific warnings that are intentional or false positives
+# SC2034: Variable appears unused (used in sourced scripts)
+# SC2086: Double quote to prevent globbing (intentional in some cases)
+# SC1090: Can't follow non-constant source (we use dynamic sourcing)
+# SC1091: Not following source (intentional for modular scripts)
+# SC2155: Declare and assign separately (we use local assignments)
+disable=SC2034,SC2086,SC1090,SC1091,SC2155
+
+# Enable additional checks
+enable=all
+
+# Exclude patterns (files to skip)
+exclude=SC1008
+

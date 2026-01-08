@@ -10,9 +10,13 @@
 > Your feedback helps make this project better for everyone! 🙏
 
 > [!IMPORTANT]
-> **Verified Working Version**
+> **Tested and Working Versions**
 > 
-> ✅ **Adobe Photoshop CC 2021 v22.0.0.35 x64** has been successfully tested and confirmed working with **Wine Standard** installation method.
+> ✅ **Adobe Photoshop CC 2021 (v22.x)** has been successfully tested with **Wine Standard** and **Proton GE** installation methods.
+> 
+> **Note about version numbers**: The specific version I tested is **v22.0.0.35**, but **any Photoshop v22.x version should work**. The exact build number may vary depending on where you obtained your installation files.
+> 
+> 💡 **Recommendation**: Try installation with whatever Photoshop version you have available. If you have CC 2021 (v22.x), it should work well!
 > 
 > ✅ **Proton GE Support**: Proton GE installation is now working successfully! Users can install and run Photoshop using Proton GE. Proton GE is automatically installed if not found.
 > 
@@ -127,20 +131,24 @@ You must:
 
 ### ⚡ Version Compatibility
 
-**This installer is optimized for Photoshop CC 2019 (v20.x).**
+**This installer has been tested with Photoshop CC 2021 (v22.x).**
 
-According to [Wine AppDB](https://appdb.winehq.org/objectManager.php?iId=17&sClass=application), different Photoshop versions have varying compatibility:
+According to [Wine AppDB](https://appdb.winehq.org/objectManager.php?iId=17&sClass=application) and community testing, different Photoshop versions have varying compatibility:
 
-- ✅ **CC 2019 (v20.0)** - Works with workarounds (GPU disabled) - **This installer**
+- ✅ **CC 2021 (v22.x)** - Tested and working (GPU disabled) - **Recommended**
+- ✅ **CC 2019 (v20.x)** - Should work with similar setup
 - ⚠️ **CC 2024** - Limited support, many GPU issues
 - 🏆 **CS3-CS6** - Better Wine compatibility, but older features
-- ❌ **CC 2020+** - Increased online requirements, not recommended
+- ❌ **CC 2020+** - Some versions have increased online requirements
 
-**Why CC 2019?**
-- Last version before heavy Creative Cloud integration
-- Good feature set for professional work
+**General Recommendation:**
+Try installation with whatever Photoshop version you have access to. The installer is designed to work with various CC versions. If you encounter issues with your version, please report them in GitHub Issues!
+
+**Why CC 2021 works well:**
+- Good balance of modern features and Wine compatibility
 - Works reliably with GPU disabled
 - Offline installation possible
+- Stable performance for professional work
 
 **Alternative Versions:**
 If you have access to older versions, **Photoshop CS6 (13.0)** or **CS3 (10.0)** have better Wine ratings (Silver/Platinum), but lack modern features.
@@ -647,6 +655,17 @@ Want to contribute code?
 1. Fork the repository
 2. Create a feature branch
 3. Test your changes thoroughly
+4. **Run ShellCheck** before submitting:
+   ```bash
+   # Install ShellCheck (if not already installed)
+   # Arch/CachyOS: sudo pacman -S shellcheck
+   # Ubuntu/Debian: sudo apt install shellcheck
+   # Fedora: sudo dnf install ShellCheck
+   
+   # Run ShellCheck on all scripts
+   shellcheck scripts/*.sh
+   ```
+   The project includes a `.shellcheckrc` configuration file for consistent checks.
 4. Submit a pull request with a clear description
 
 **Every contribution, big or small, makes this project better! 🙏**
@@ -729,7 +748,7 @@ You need a valid Photoshop license, but you can use the offline installer withou
 <details>
 <summary><b>Q: Which Photoshop version works?</b></summary>
 
-Photoshop CC 2019 (v20.x) is tested and recommended. Other versions may not work properly.
+Photoshop CC 2021 (v22.x) is tested and confirmed working. CC 2019 (v20.x) should also work. Generally, try with whatever version you have available - many CC versions work with proper configuration!
 </details>
 
 <details>

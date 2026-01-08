@@ -1,13 +1,15 @@
 [Desktop Entry]
-Name=Photoshop
-Exec=bash pspath/launcher/launcher.sh %F
+Version=1.0
 Type=Application
-StartupNotify=true
+Name=Photoshop
 Comment=Adobe Photoshop for Linux
-Icon=photoshopicon
+Exec=bash pspath/launcher/launcher.sh %F
+Icon=photoshop
+StartupNotify=true
 StartupWMClass=photoshop.exe
 MimeType=image/vnd.adobe.photoshop;image/x-photoshop;application/x-photoshop;image/psd;application/psd;
 Categories=Graphics;2DGraphics;RasterGraphics;
+Terminal=false
 Name[de_DE]=Photoshop
 Name[fr_FR]=Photoshop
 Name[en_US]=Photoshop

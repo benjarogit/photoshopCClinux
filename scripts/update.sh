@@ -1,0 +1,224 @@
+#!/usr/bin/env bash
+################################################################################
+# Photoshop CC Linux - Update Check Module
+#
+# Description:
+#   Automatically checks for new versions on GitHub and notifies users
+#   when updates are available. Non-blocking and runs in background.
+#
+# Author:       benjarogit
+# Repository:   https://github.com/benjarogit/photoshopCClinux
+# License:      GPL-3.0
+# Copyright:    (c) 2024 benjarogit
+################################################################################
+
+# ============================================================================
+# @namespace update
+# @description Update check functions for version management
+# ============================================================================
+
+# GitHub repository information
+GITHUB_REPO="benjarogit/photoshopCClinux"
+GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+
+# Cache file for update check results (to avoid too frequent checks)
+UPDATE_CACHE_FILE="${UPDATE_CACHE_FILE:-$HOME/.photoshopCCV19/.update_cache}"
+UPDATE_CACHE_TTL="${UPDATE_CACHE_TTL:-86400}"  # 24 hours in seconds
+
+# ============================================================================
+# @function update::get_current_version
+# @description Get current version from git or VERSION file
+# @return Current version (echoed to stdout)
+# ============================================================================
+update::get_current_version() {
+    # Try to get version from git tag
+    if command -v git >/dev/null 2>&1 && [ -d ".git" ]; then
+        local git_version
+        git_version=$(git describe --tags --exact-match 2>/dev/null || git describe --tags 2>/dev/null || echo "")
+        if [ -n "$git_version" ]; then
+            echo "$git_version"
+            return 0
+        fi
+    fi
+    
+    # Try to get version from VERSION file
+    if [ -f "VERSION" ]; then
+        cat "VERSION"
+        return 0
+    fi
+    
+    # Fallback: try to extract from CHANGELOG.md
+    if [ -f "CHANGELOG.md" ]; then
+        local changelog_version
+        changelog_version=$(grep -m 1 "^## \[v" CHANGELOG.md 2>/dev/null | sed 's/^## \[v\([0-9.]*\)\].*/\1/' || echo "")
+        if [ -n "$changelog_version" ]; then
+            echo "v$changelog_version"
+            return 0
+        fi
+    fi
+    
+    # Last resort: return unknown
+    echo "unknown"
+    return 1
+}
+
+# ============================================================================
+# @function update::get_latest_version
+# @description Get latest version from GitHub API
+# @return Latest version (echoed to stdout), empty string on error
+# ============================================================================
+update::get_latest_version() {
+    # Check if we have cached result and it's still valid
+    if [ -f "$UPDATE_CACHE_FILE" ]; then
+        local cache_time
+        cache_time=$(stat -c %Y "$UPDATE_CACHE_FILE" 2>/dev/null || stat -f %m "$UPDATE_CACHE_FILE" 2>/dev/null || echo "0")
+        local current_time
+        current_time=$(date +%s)
+        local age=$((current_time - cache_time))
+        
+        if [ $age -lt $UPDATE_CACHE_TTL ]; then
+            # Cache is still valid, return cached version
+            cat "$UPDATE_CACHE_FILE"
+            return 0
+        fi
+    fi
+    
+    # Fetch latest version from GitHub API
+    local latest_version
+    if command -v curl >/dev/null 2>&1; then
+        latest_version=$(curl -s "$GITHUB_API" 2>/dev/null | grep -o '"tag_name":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+    elif command -v wget >/dev/null 2>&1; then
+        latest_version=$(wget -qO- "$GITHUB_API" 2>/dev/null | grep -o '"tag_name":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+    fi
+    
+    # Cache the result
+    if [ -n "$latest_version" ]; then
+        mkdir -p "$(dirname "$UPDATE_CACHE_FILE")"
+        echo "$latest_version" > "$UPDATE_CACHE_FILE"
+    fi
+    
+    echo "$latest_version"
+}
+
+# ============================================================================
+# @function update::compare_versions
+# @description Compare two version strings
+# @param $1 Version 1
+# @param $2 Version 2
+# @return 0 if v1 < v2, 1 if v1 >= v2
+# ============================================================================
+update::compare_versions() {
+    local v1="$1"
+    local v2="$2"
+    
+    # Remove 'v' prefix if present
+    v1="${v1#v}"
+    v2="${v2#v}"
+    
+    # Simple version comparison (handles x.y.z format)
+    # Convert to comparable format by padding with zeros
+    local v1_padded
+    v1_padded=$(echo "$v1" | awk -F. '{printf "%03d%03d%03d", $1, $2, $3}')
+    local v2_padded
+    v2_padded=$(echo "$v2" | awk -F. '{printf "%03d%03d%03d", $1, $2, $3}')
+    
+    if [ "$v1_padded" -lt "$v2_padded" ]; then
+        return 0  # v1 < v2
+    else
+        return 1  # v1 >= v2
+    fi
+}
+
+# ============================================================================
+# @function update::check
+# @description Check for updates (non-blocking)
+# @param $1 Optional: Force check (ignore cache)
+# @return 0 if update available, 1 if up to date or error
+# ============================================================================
+update::check() {
+    local force="${1:-false}"
+    
+    # Clear cache if force check
+    if [ "$force" = "true" ] && [ -f "$UPDATE_CACHE_FILE" ]; then
+        rm -f "$UPDATE_CACHE_FILE"
+    fi
+    
+    local current_version
+    current_version=$(update::get_current_version)
+    local latest_version
+    latest_version=$(update::get_latest_version)
+    
+    # If we couldn't determine versions, silently fail
+    if [ -z "$current_version" ] || [ -z "$latest_version" ] || [ "$current_version" = "unknown" ]; then
+        return 1
+    fi
+    
+    # Compare versions
+    if update::compare_versions "$current_version" "$latest_version"; then
+        # Update available
+        return 0
+    else
+        # Up to date
+        return 1
+    fi
+}
+
+# ============================================================================
+# @function update::notify
+# @description Display update notification (non-blocking)
+# @param $1 Optional: Current version
+# @param $2 Optional: Latest version
+# @return 0 on success, 1 on error
+# ============================================================================
+update::notify() {
+    local current_version="${1:-}"
+    local latest_version="${2:-}"
+    
+    # Get versions if not provided
+    if [ -z "$current_version" ]; then
+        current_version=$(update::get_current_version)
+    fi
+    if [ -z "$latest_version" ]; then
+        latest_version=$(update::get_latest_version)
+    fi
+    
+    # Check if update is available
+    if ! update::check; then
+        return 1
+    fi
+    
+    # Display notification
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "           Update verfügbar / Update Available"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo ""
+    echo "  Aktuelle Version / Current Version: $current_version"
+    echo "  Neue Version / New Version:         $latest_version"
+    echo ""
+    echo "  Repository: https://github.com/${GITHUB_REPO}"
+    echo "  Releases:   https://github.com/${GITHUB_REPO}/releases"
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════"
+    echo ""
+    
+    return 0
+}
+
+# ============================================================================
+# @function update::check_async
+# @description Check for updates in background (non-blocking)
+# @return 0 on success, 1 on error
+# ============================================================================
+update::check_async() {
+    # Run update check in background
+    (
+        if update::check; then
+            # Update available - log it but don't block
+            log::info "Update available: $(update::get_latest_version)"
+        fi
+    ) &
+    
+    return 0
+}
+

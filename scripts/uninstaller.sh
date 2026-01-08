@@ -15,12 +15,24 @@
 #               https://github.com/Gictorbit/photoshopCClinux
 ################################################################################
 
+# CRITICAL: Robust error handling
+# set -e: Exit on errors
+# set -u: Exit on undefined variables
+# set -o pipefail: Exit on pipeline errors
+# BusyBox compatibility: pipefail may be missing, so || true
+set -eu
+(set -o pipefail 2>/dev/null) || true
+
 # CRITICAL: Initialize LANG_CODE BEFORE sharedFuncs.sh (sharedFuncs.sh enables set -u)
 # Initialize LANG_CODE (will be set by detect_language if not already set)
 LANG_CODE="${LANG_CODE:-}"
 
 # CRITICAL: Prevent source hijacking - always use absolute path
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export SCRIPT_DIR
+# Source modules in correct order
+source "$SCRIPT_DIR/i18n.sh"
+source "$SCRIPT_DIR/security.sh"
 source "$SCRIPT_DIR/sharedFuncs.sh"
 
 # Setup comprehensive logging for uninstaller (similar to PhotoshopSetup.sh)
@@ -115,111 +127,57 @@ detect_language() {
 
 # Multi-language messages
 msg_uninstall_confirm() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo -e "${C_YELLOW}⚠${C_RESET} ${C_CYAN}Möchtest du Photoshop wirklich deinstallieren?${C_RESET}"
-    else
-        echo -e "${C_YELLOW}⚠${C_RESET} ${C_CYAN}Are you sure you want to uninstall Photoshop?${C_RESET}"
-    fi
+    echo -e "${C_YELLOW}⚠${C_RESET} ${C_CYAN}$(i18n::get "uninstall_confirm")${C_RESET}"
 }
 
 msg_goodbye() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo "Auf Wiedersehen!"
-    else
-        echo "Goodbye!"
-    fi
+    echo "$(i18n::get "goodbye")"
 }
 
 msg_remove_dir() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo "Entferne Photoshop-Verzeichnis..."
-    else
-        echo "Removing Photoshop directory..."
-    fi
+    echo "$(i18n::get "removing_photoshop_directory")"
 }
 
 msg_dir_not_found() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo "Photoshop-Verzeichnis nicht gefunden!"
-    else
-        echo "Photoshop directory not found!"
-    fi
+    echo "$(i18n::get "photoshop_directory_not_found")"
 }
 
 msg_remove_command() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo "Entferne Launcher-Befehl..."
-    else
-        echo "Removing launcher command..."
-    fi
+    echo "$(i18n::get "removing_launcher_command")"
 }
 
 msg_command_not_found() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo "Launcher-Befehl nicht gefunden!"
-    else
-        echo "Launcher command not found!"
-    fi
+    echo "$(i18n::get "launcher_command_not_found")"
 }
 
 msg_remove_desktop() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo "Entferne Desktop-Eintrag..."
-    else
-        echo "Removing desktop entry..."
-    fi
+    echo "$(i18n::get "removing_desktop_entry")"
 }
 
 msg_desktop_not_found() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo "Desktop-Eintrag nicht gefunden!"
-    else
-        echo "Desktop entry not found!"
-    fi
+    echo "$(i18n::get "desktop_entry_not_found")"
 }
 
 msg_cache_info() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo "Alle heruntergeladenen Komponenten sind im Cache-Verzeichnis"
-        echo "und können für die nächste Installation wiederverwendet werden."
-        echo "Cache-Verzeichnis:"
-    else
-        echo "All downloaded components are in cache directory"
-        echo "and can be reused for next installation."
-        echo "Cache directory:"
-    fi
+    echo "$(i18n::get "cache_info_line1")"
+    echo "$(i18n::get "cache_info_line2")"
+    echo "$(i18n::get "cache_dir_label")"
 }
 
 msg_delete_cache() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo "Möchtest du das Cache-Verzeichnis löschen?"
-    else
-        echo "Would you like to delete the cache directory?"
-    fi
+    echo "$(i18n::get "delete_cache_question")"
 }
 
 msg_cache_removed() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo "Cache-Verzeichnis entfernt."
-    else
-        echo "Cache directory removed."
-    fi
+    echo "$(i18n::get "cache_removed")"
 }
 
 msg_cache_kept() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo "Gut, du kannst die heruntergeladenen Daten später für die Installation verwenden."
-    else
-        echo "Nice, you can use downloaded data later for Photoshop installation."
-    fi
+    echo "$(i18n::get "cache_kept")"
 }
 
 msg_cache_not_found() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo "Cache-Verzeichnis nicht gefunden!"
-    else
-        echo "Cache directory not found!"
-    fi
+    echo "$(i18n::get "cache_not_found")"
 }
 
 main() {    
@@ -233,20 +191,16 @@ main() {
     log_debug "Language: $LANG_CODE"
     log_debug "User: ${USER:-$(id -un)}"
     log_debug "Home: ${HOME:-}"
-    
+
     CMD_PATH="/usr/local/bin/photoshop"
     ENTRY_PATH="$HOME/.local/share/applications/photoshop.desktop"
     
     log_debug "CMD_PATH: $CMD_PATH"
     log_debug "ENTRY_PATH: $ENTRY_PATH"
     
-    if [ "$LANG_CODE" = "de" ]; then
-        notify-send "Photoshop" "Photoshop-Deinstaller gestartet" -i "photoshop" 2>/dev/null || true
-        log_info "Uninstaller started (German)"
-    else
-        notify-send "Photoshop" "Photoshop uninstaller started" -i "photoshop" 2>/dev/null || true
-        log_info "Uninstaller started (English)"
-    fi
+    local start_msg="$(i18n::get "uninstaller_started")"
+    notify-send "Photoshop" "$start_msg" -i "photoshop" 2>/dev/null || true
+    log_info "$start_msg"
 
     # CRITICAL: Load installation paths and Wine version info BEFORE using them
     # This ensures WINE_VERSION_INFO is available for the uninstallation logic
@@ -263,24 +217,15 @@ main() {
 
     # Show which Wine version was used (if available)
     if [ -n "${WINE_VERSION_INFO:-}" ] && [ -n "$WINE_VERSION_INFO" ]; then
-        if [ "$LANG_CODE" = "de" ]; then
-            echo -e "${C_CYAN}ℹ${C_RESET} ${C_GRAY}Installation verwendet: Proton GE${C_RESET}"
-            setup_log "Wine-Version: Proton GE ($WINE_VERSION_INFO)" 2>/dev/null || true
-        else
-            echo -e "${C_CYAN}ℹ${C_RESET} ${C_GRAY}Installation used: Proton GE${C_RESET}"
-            setup_log "Wine version: Proton GE ($WINE_VERSION_INFO)" 2>/dev/null || true
-        fi
+        echo -e "${C_CYAN}ℹ${C_RESET} ${C_GRAY}$(i18n::get "uninstaller_using_proton")${C_RESET}"
+        setup_log "$(i18n::get "uninstaller_using_proton") ($WINE_VERSION_INFO)" 2>/dev/null || true
     else
-        if [ "$LANG_CODE" = "de" ]; then
-            echo -e "${C_CYAN}ℹ${C_RESET} ${C_GRAY}Installation verwendet: Wine Standard${C_RESET}"
-            setup_log "Wine-Version: Wine Standard" 2>/dev/null || true
-        else
-            echo -e "${C_CYAN}ℹ${C_RESET} ${C_GRAY}Installation used: Wine Standard${C_RESET}"
-            setup_log "Wine version: Wine Standard" 2>/dev/null || true
-        fi
+        echo -e "${C_CYAN}ℹ${C_RESET} ${C_GRAY}$(i18n::get "uninstaller_using_wine")${C_RESET}"
+        setup_log "$(i18n::get "uninstaller_using_wine")" 2>/dev/null || true
     fi
     echo ""
 
+    # CRITICAL: Only ask once if user is sure - then proceed automatically with spinner
     ask_question "$(msg_uninstall_confirm)" "N"
     if [ "$result" = "no" ]; then
         log_info "User cancelled uninstallation"
@@ -290,13 +235,12 @@ main() {
     
     log_info "User confirmed uninstallation"
     
+    # Show spinner message
+    echo -e "${C_YELLOW}→${C_RESET} ${C_CYAN}$(i18n::get "uninstalling_photoshop")${C_RESET}"
+    
     # CRITICAL: Kill all Wine/Proton processes before removing the prefix
     # This prevents "version mismatch" errors and ensures clean uninstallation
-    if [ "$LANG_CODE" = "de" ]; then
-        echo -e "${C_YELLOW}→${C_RESET} ${C_CYAN}Beende Wine/Proton-Prozesse...${C_RESET}"
-    else
-        echo -e "${C_YELLOW}→${C_RESET} ${C_CYAN}Stopping Wine/Proton processes...${C_RESET}"
-    fi
+    echo -e "${C_YELLOW}→${C_RESET} ${C_CYAN}$(i18n::get "stopping_wine_processes")${C_RESET}"
     
     log_debug "Killing Wine/Proton processes..."
     
@@ -333,11 +277,24 @@ main() {
     if [ -d "$SCR_PATH" ];then
         msg_remove_dir
         log_info "Removing directory: $SCR_PATH"
-        if rm -rf "$SCR_PATH" 2>&1; then
-            log_info "Successfully removed Photoshop directory"
+        # CRITICAL: Use safe_remove for security
+        if type filesystem::safe_remove >/dev/null 2>&1; then
+            if filesystem::safe_remove "$SCR_PATH" "uninstaller"; then
+                log_info "Successfully removed Photoshop directory"
+            else
+                log_error "Failed to remove Photoshop directory"
+                error2 "$(i18n::get "remove_prefix_failed")"
+            fi
         else
-            log_error "Failed to remove Photoshop directory"
-            error2 "$([ "$LANG_CODE" = "de" ] && echo "Konnte Photoshop-Verzeichnis nicht entfernen" || echo "Couldn't remove Photoshop directory")"
+            # Fallback if filesystem::safe_remove not available (should not happen)
+            if [ -z "$SCR_PATH" ] || [ "$SCR_PATH" = "/" ] || [ "$SCR_PATH" = "/root" ]; then
+                error2 "$(printf "$(i18n::get "unsafe_path_removal")" "$SCR_PATH")"
+            elif rm -rf "$SCR_PATH" 2>&1; then
+                log_info "Successfully removed Photoshop directory"
+            else
+                log_error "Failed to remove Photoshop directory"
+                error2 "$(i18n::get "remove_prefix_failed")"
+            fi
         fi
     else
         log_warning "Photoshop directory not found: $SCR_PATH"
@@ -347,7 +304,19 @@ main() {
     #Unlink command 
     if [ -L "$CMD_PATH" ];then
         msg_remove_command
-        sudo unlink "$CMD_PATH" 2>/dev/null || error2 "$([ "$LANG_CODE" = "de" ] && echo "Konnte Launcher-Befehl nicht entfernen" || echo "Couldn't remove launcher command")"
+        # CRITICAL: Validate path before sudo operation
+        if type security::validate_path >/dev/null 2>&1; then
+            if ! security::validate_path "$CMD_PATH"; then
+                error2 "$(printf "$(i18n::get "unsafe_path_sudo")" "$CMD_PATH")"
+            fi
+        fi
+        
+        # TOCTOU-Schutz: Prüfe nochmal ob es wirklich ein Symlink ist
+        if [ ! -L "$CMD_PATH" ]; then
+            error2 "$(i18n::get "cmd_path_toctou")"
+        fi
+        
+        sudo unlink "$CMD_PATH" 2>/dev/null || error2 "$(i18n::get "remove_launcher_failed")"
     else
         msg_command_not_found
     fi
@@ -379,7 +348,7 @@ main() {
             desktop_entries+=("$entry")
         done < <(find "$HOME/.local/share/applications/wine/Programs" -type f \( -name "*Photoshop*" -o -name "*photoshop*" \) -print0 2>/dev/null || true)
     fi
-    
+
     # Search for desktop icons (Desktop shortcuts)
     # Desktop directory can be "Desktop" (English) or "Schreibtisch" (German)
     local desktop_dirs=(
@@ -405,11 +374,7 @@ main() {
         if [ -f "$entry" ]; then
             if rm "$entry" 2>/dev/null; then
                 found_any=true
-                if [ "$LANG_CODE" = "de" ]; then
-                    setup_log "Entfernt (Menü): $entry" 2>/dev/null || true
-                else
-                    setup_log "Removed (menu): $entry" 2>/dev/null || true
-                fi
+                setup_log "$(i18n::get "removed_menu" "$entry")" 2>/dev/null || true
             fi
         fi
     done
@@ -419,11 +384,7 @@ main() {
         if [ -f "$icon" ]; then
             if rm "$icon" 2>/dev/null; then
                 found_any=true
-                if [ "$LANG_CODE" = "de" ]; then
-                    setup_log "Entfernt (Desktop): $icon" 2>/dev/null || true
-                else
-                    setup_log "Removed (desktop): $icon" 2>/dev/null || true
-                fi
+                setup_log "$(i18n::get "removed_desktop" "$icon")" 2>/dev/null || true
             fi
         fi
     done
@@ -447,22 +408,63 @@ main() {
     if command -v update-desktop-database >/dev/null 2>&1; then
         update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
     fi
-
-    #delete cache directory
-    if [ -d "$CACHE_PATH" ];then
-        echo "--------------------------------"
-        msg_cache_info
-        echo -e "\033[1;36m$CACHE_PATH\033[0m"
-        echo "--------------------------------"
-        ask_question "$(msg_delete_cache)" "N"
-        if [ "$result" = "yes" ];then
-            rm -rf "$CACHE_PATH" 2>/dev/null || error2 "$([ "$LANG_CODE" = "de" ] && echo "Konnte Cache-Verzeichnis nicht entfernen" || echo "Couldn't remove cache directory")"
-            msg_cache_removed
-        else
-            msg_cache_kept
+    
+    # CRITICAL: Remove installed icons (PNG and SVG)
+    # Icons are installed in ~/.local/share/icons/hicolor/
+    echo -e "${C_YELLOW}→${C_RESET} ${C_CYAN}$(i18n::get "removing_icons")${C_RESET}"
+    
+    local hicolor_dir="$HOME/.local/share/icons/hicolor"
+    local icon_name="photoshop"
+    local icons_removed=false
+    
+    # Remove PNG icons in all sizes
+    for size in 16 22 24 32 48 64 128 256 512; do
+        local icon_file="$hicolor_dir/${size}x${size}/apps/${icon_name}.png"
+        if [ -f "$icon_file" ]; then
+            rm -f "$icon_file" 2>/dev/null && icons_removed=true
         fi
+    done
+    
+    # Remove SVG icon
+    local svg_icon="$hicolor_dir/scalable/apps/${icon_name}.svg"
+    if [ -f "$svg_icon" ]; then
+        rm -f "$svg_icon" 2>/dev/null && icons_removed=true
+    fi
+    
+    # Update icon cache after removal
+    if [ "$icons_removed" = true ]; then
+        if command -v gtk-update-icon-cache >/dev/null 2>&1 && [ -d "$hicolor_dir" ]; then
+            gtk-update-icon-cache -f -t "$hicolor_dir" 2>/dev/null || true
+        fi
+        if command -v kbuildsycoca4 >/dev/null 2>&1; then
+            kbuildsycoca4 --noincremental 2>/dev/null || true
+        fi
+        log_info "$(i18n::get "icons_removed_updated")"
     else
-        msg_cache_not_found
+        log_debug "$(i18n::get "no_icons_found")"
+    fi
+
+    #delete cache directory (automatic - no confirmation needed)
+    if [ -d "$CACHE_PATH" ];then
+        log_info "$(i18n::get "removing_cache_dir" "$CACHE_PATH")"
+        # CRITICAL: Use safe_remove for security
+        if type filesystem::safe_remove >/dev/null 2>&1; then
+            filesystem::safe_remove "$CACHE_PATH" "uninstaller" || log_warning "Konnte Cache-Verzeichnis nicht entfernen"
+        else
+            # Fallback if filesystem::safe_remove not available
+            if [ -n "$CACHE_PATH" ] && [ "$CACHE_PATH" != "/" ] && [ "$CACHE_PATH" != "/root" ]; then
+                # Additional validation before fallback rm -rf
+                if type security::validate_path >/dev/null 2>&1; then
+                    if security::validate_path "$CACHE_PATH"; then
+                        rm -rf "$CACHE_PATH" 2>/dev/null || log_warning "Konnte Cache-Verzeichnis nicht entfernen"
+                    else
+                        log_warning "Unsafe cache path, skipping removal: $CACHE_PATH"
+                    fi
+                else
+                    rm -rf "$CACHE_PATH" 2>/dev/null || log_warning "Konnte Cache-Verzeichnis nicht entfernen"
+                fi
+            fi
+        fi
     fi
     
     # CRITICAL: Check if Wine Standard or Proton GE should be uninstalled
@@ -503,50 +505,20 @@ main() {
             fi
         fi
         
-        # If no other Wine prefixes exist, ask if Wine should be uninstalled
+        # If no other Wine prefixes exist, automatically uninstall Wine (no confirmation needed)
         if [ "$other_wine_prefixes" -eq 0 ]; then
-            if [ "$LANG_CODE" = "de" ]; then
-                echo ""
-                echo -e "${C_YELLOW}⚠${C_RESET} ${C_CYAN}Wine Standard wurde für Photoshop verwendet.${C_RESET}"
-                echo -e "${C_GRAY}   Es wurden keine anderen Wine-Prefixes gefunden.${C_RESET}"
-                ask_question "Möchtest du Wine Standard auch deinstallieren? (nur wenn es nur für Photoshop installiert wurde)" "N"
-            else
-                echo ""
-                echo -e "${C_YELLOW}⚠${C_RESET} ${C_CYAN}Wine Standard was used for Photoshop.${C_RESET}"
-                echo -e "${C_GRAY}   No other Wine prefixes were found.${C_RESET}"
-                ask_question "Do you want to uninstall Wine Standard? (only if it was installed only for Photoshop)" "N"
-            fi
+            log_info "$(i18n::get "wine_only_for_photoshop")"
             
-            if [ "$result" = "yes" ]; then
-                if [ "$LANG_CODE" = "de" ]; then
-                    echo -e "${C_YELLOW}→${C_RESET} ${C_CYAN}Deinstalliere Wine Standard...${C_RESET}"
-                else
-                    echo -e "${C_YELLOW}→${C_RESET} ${C_CYAN}Uninstalling Wine Standard...${C_RESET}"
-                fi
-                
-                # Try to uninstall Wine via package manager
-                if command -v pacman >/dev/null 2>&1; then
-                    # Arch-based
-                    sudo pacman -Rns wine wine-staging wine-mono wine-gecko 2>/dev/null || sudo pacman -Rns wine 2>/dev/null || true
-                elif command -v apt >/dev/null 2>&1; then
-                    # Debian-based
-                    sudo apt remove --purge wine wine-stable wine-staging 2>/dev/null || true
-                elif command -v dnf >/dev/null 2>&1; then
-                    # Fedora-based
-                    sudo dnf remove wine 2>/dev/null || true
-                else
-                    if [ "$LANG_CODE" = "de" ]; then
-                        echo -e "${C_YELLOW}⚠${C_RESET} ${C_YELLOW}Bitte deinstalliere Wine manuell für deine Distribution.${C_RESET}"
-                    else
-                        echo -e "${C_YELLOW}⚠${C_RESET} ${C_YELLOW}Please uninstall Wine manually for your distribution.${C_RESET}"
-                    fi
-                fi
-                
-                if [ "$LANG_CODE" = "de" ]; then
-                    echo -e "${C_GREEN}✓${C_RESET} ${C_CYAN}Wine Standard deinstalliert${C_RESET}"
-                else
-                    echo -e "${C_GREEN}✓${C_RESET} ${C_CYAN}Wine Standard uninstalled${C_RESET}"
-                fi
+            # Try to uninstall Wine via package manager (silent, no confirmation)
+            if command -v pacman >/dev/null 2>&1; then
+                # Arch-based
+                sudo pacman -Rns wine wine-staging wine-mono wine-gecko 2>/dev/null || sudo pacman -Rns wine 2>/dev/null || true
+            elif command -v apt >/dev/null 2>&1; then
+                # Debian-based
+                sudo apt remove --purge wine wine-stable wine-staging 2>/dev/null || true
+            elif command -v dnf >/dev/null 2>&1; then
+                # Fedora-based
+                sudo dnf remove wine 2>/dev/null || true
             fi
         fi
     fi
@@ -584,70 +556,41 @@ main() {
             fi
         fi
         
-        # If Proton GE was found (and it's not Steam), ask if it should be uninstalled
+        # If Proton GE was found (and it's not Steam), automatically uninstall (no confirmation needed)
         if [ -n "$proton_ge_path" ]; then
-            if [ "$LANG_CODE" = "de" ]; then
-                echo ""
-                echo -e "${C_YELLOW}⚠${C_RESET} ${C_CYAN}Proton GE wurde für Photoshop verwendet.${C_RESET}"
-                if [ "$proton_ge_path" = "aur" ]; then
-                    echo -e "${C_GRAY}   Proton GE wurde via AUR installiert.${C_RESET}"
-                    ask_question "Möchtest du Proton GE auch deinstallieren? (nur wenn es nur für Photoshop installiert wurde)" "N"
-                else
-                    echo -e "${C_GRAY}   Proton GE wurde manuell installiert: $proton_ge_path${C_RESET}"
-                    ask_question "Möchtest du Proton GE auch deinstallieren? (nur wenn es nur für Photoshop installiert wurde)" "N"
+            log_info "$(i18n::get "proton_only_for_photoshop")"
+            
+            if [ "$proton_ge_path" = "aur" ]; then
+                # AUR-installed: Use package manager (silent, no confirmation)
+                if command -v yay >/dev/null 2>&1; then
+                    yay -Rns proton-ge-custom-bin 2>/dev/null || true
+                elif command -v paru >/dev/null 2>&1; then
+                    paru -Rns proton-ge-custom-bin 2>/dev/null || true
+                elif command -v pacman >/dev/null 2>&1; then
+                    sudo pacman -Rns proton-ge-custom-bin 2>/dev/null || true
                 fi
             else
-                echo ""
-                echo -e "${C_YELLOW}⚠${C_RESET} ${C_CYAN}Proton GE was used for Photoshop.${C_RESET}"
-                if [ "$proton_ge_path" = "aur" ]; then
-                    echo -e "${C_GRAY}   Proton GE was installed via AUR.${C_RESET}"
-                    ask_question "Do you want to uninstall Proton GE? (only if it was installed only for Photoshop)" "N"
-                else
-                    echo -e "${C_GRAY}   Proton GE was manually installed: $proton_ge_path${C_RESET}"
-                    ask_question "Do you want to uninstall Proton GE? (only if it was installed only for Photoshop)" "N"
-                fi
-            fi
-            
-            if [ "$result" = "yes" ]; then
-                if [ "$LANG_CODE" = "de" ]; then
-                    echo -e "${C_YELLOW}→${C_RESET} ${C_CYAN}Deinstalliere Proton GE...${C_RESET}"
-                else
-                    echo -e "${C_YELLOW}→${C_RESET} ${C_CYAN}Uninstalling Proton GE...${C_RESET}"
-                fi
-                
-                if [ "$proton_ge_path" = "aur" ]; then
-                    # AUR-installed: Use package manager
-                    if command -v yay >/dev/null 2>&1; then
-                        yay -Rns proton-ge-custom-bin 2>/dev/null || true
-                    elif command -v paru >/dev/null 2>&1; then
-                        paru -Rns proton-ge-custom-bin 2>/dev/null || true
-                    elif command -v pacman >/dev/null 2>&1; then
-                        sudo pacman -Rns proton-ge-custom-bin 2>/dev/null || true
+                # Manually installed: Remove directory
+                if [ -d "$proton_ge_path" ]; then
+                    # CRITICAL: Use safe_remove for security
+                    if type filesystem::safe_remove >/dev/null 2>&1; then
+                        filesystem::safe_remove "$proton_ge_path" "uninstaller" || log_warning "Konnte Proton GE Verzeichnis nicht entfernen: $proton_ge_path"
+                    else
+                        # Fallback: validate before rm -rf
+                        if [ -z "$proton_ge_path" ] || [ "$proton_ge_path" = "/" ] || [ "$proton_ge_path" = "/root" ]; then
+                            log_warning "Unsichere Proton GE Pfad, überspringe Löschung: $proton_ge_path"
+                        else
+                            rm -rf "$proton_ge_path" 2>/dev/null || log_warning "Konnte Proton GE Verzeichnis nicht entfernen: $proton_ge_path"
+        fi
                     fi
-                else
-                    # Manually installed: Remove directory
-                    if [ -d "$proton_ge_path" ]; then
-                        rm -rf "$proton_ge_path" 2>/dev/null || true
-                    fi
-                fi
-                
-                if [ "$LANG_CODE" = "de" ]; then
-                    echo -e "${C_GREEN}✓${C_RESET} ${C_CYAN}Proton GE deinstalliert${C_RESET}"
-                else
-                    echo -e "${C_GREEN}✓${C_RESET} ${C_CYAN}Proton GE uninstalled${C_RESET}"
                 fi
             fi
         fi
     fi
     
     # Exit cleanly (fixes hanging issue)
-    if [ "$LANG_CODE" = "de" ]; then
-        echo ""
-        echo "✓ Deinstallation abgeschlossen!"
-    else
-        echo ""
-        echo "✓ Uninstallation completed!"
-    fi
+    echo ""
+    echo "$(i18n::get "uninstall_completed")"
     exit 0
 }
 

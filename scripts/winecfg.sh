@@ -17,6 +17,10 @@
 
 # KRITISCH: Source-Hijacking verhindern - immer absoluten Pfad verwenden
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source security module if available (for path validation)
+if [ -f "$SCRIPT_DIR/security.sh" ]; then
+    source "$SCRIPT_DIR/security.sh"
+fi
 source "$SCRIPT_DIR/sharedFuncs.sh"
 
 function main() {
@@ -26,9 +30,18 @@ function main() {
     RESOURCES_PATH="$SCR_PATH/resources"
     WINE_PREFIX="$SCR_PATH/prefix"
     # KRITISCH: WINEPREFIX-Validierung - verhindere Manipulation
-    if [[ "$WINE_PREFIX" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
-        echo "ERROR: WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX" >&2
-        exit 1
+    # Use centralized security::validate_path function if available
+    if command -v security::validate_path >/dev/null 2>&1; then
+        if ! security::validate_path "$WINE_PREFIX"; then
+            echo "ERROR: WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX" >&2
+            exit 1
+        fi
+    else
+        # Fallback to inline validation if security module not loaded
+        if [[ "$WINE_PREFIX" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
+            echo "ERROR: WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX" >&2
+            exit 1
+        fi
     fi
     export WINEPREFIX="$WINE_PREFIX"
         
@@ -48,9 +61,18 @@ function main() {
         echo ""
         WINE_PREFIX="$HOME/.wine"
         # KRITISCH: WINEPREFIX-Validierung - verhindere Manipulation
-    if [[ "$WINE_PREFIX" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
-        echo "ERROR: WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX" >&2
-        exit 1
+    # Use centralized security::validate_path function if available
+    if command -v security::validate_path >/dev/null 2>&1; then
+        if ! security::validate_path "$WINE_PREFIX"; then
+            echo "ERROR: WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX" >&2
+            exit 1
+        fi
+    else
+        # Fallback to inline validation if security module not loaded
+        if [[ "$WINE_PREFIX" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
+            echo "ERROR: WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX" >&2
+            exit 1
+        fi
     fi
     export WINEPREFIX="$WINE_PREFIX"
         echo "Wine-Prefix: $WINE_PREFIX"

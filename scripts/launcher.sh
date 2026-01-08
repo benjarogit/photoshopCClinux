@@ -23,9 +23,10 @@ set -eu
 # Locale/UTF-8 for DE/EN (with check for existing locale)
 # CRITICAL: Check if locale exists (Alpine often only has C.UTF-8)
 if command -v locale >/dev/null 2>&1; then
-    if locale -a 2>/dev/null | grep -qE "^(de_DE|de_DE\.utf8|de_DE\.UTF-8)$"; then
+    # Fix grep warnings: Use -F for fixed strings or escape properly
+    if locale -a 2>/dev/null | grep -qF "de_DE.utf8" || locale -a 2>/dev/null | grep -qF "de_DE.UTF-8" || locale -a 2>/dev/null | grep -qF "de_DE"; then
         export LANG="${LANG:-de_DE.UTF-8}"
-    elif locale -a 2>/dev/null | grep -qE "^(C\.utf8|C\.UTF-8)$"; then
+    elif locale -a 2>/dev/null | grep -qF "C.utf8" || locale -a 2>/dev/null | grep -qF "C.UTF-8"; then
         export LANG="${LANG:-C.UTF-8}"
     else
         export LANG="${LANG:-C}"
@@ -44,6 +45,10 @@ export LC_ALL="${LC_ALL:-$LANG}"
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" || echo "$0")")" && pwd)"
 
 # Load shared functions and paths from the script's directory
+# Source security module if available (for path validation)
+if [ -f "$SCRIPT_DIR/security.sh" ]; then
+    source "$SCRIPT_DIR/security.sh"
+fi
 source "$SCRIPT_DIR/sharedFuncs.sh"
 load_paths
 
@@ -58,11 +63,38 @@ RESOURCES_PATH="$SCR_PATH/resources"
 WINE_PREFIX="$SCR_PATH/prefix"
 
 # CRITICAL: WINEPREFIX validation - prevent manipulation
-if [[ "$WINE_PREFIX" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
-    echo "ERROR: WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX" >&2
-    exit 1
+# Use centralized security::validate_path function if available
+if command -v security::validate_path >/dev/null 2>&1; then
+    if ! security::validate_path "$WINE_PREFIX"; then
+        echo "ERROR: WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX" >&2
+        exit 1
+    fi
+else
+    # Fallback to inline validation if security module not loaded
+    if [[ "$WINE_PREFIX" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
+        echo "ERROR: WINEPREFIX zeigt auf System-Verzeichnis (Sicherheitsrisiko): $WINE_PREFIX" >&2
+        exit 1
+    fi
 fi
 export WINEPREFIX="$WINE_PREFIX"
+
+# CRITICAL: Suppress Wine warnings to reduce log noise
+# WINEDEBUG=-all suppresses all warnings, but we keep errors visible
+# This reduces the 64-bit/WOW64 warnings during runtime
+export WINEDEBUG=-all,+err
+
+# BEST PRACTICE: Enable Esync/Fsync for better performance (Internet-Tipp)
+# Esync/Fsync improve performance by using eventfd/io_uring instead of wineserver
+# Check if kernel supports it (requires kernel 4.17+ for fsync, 3.17+ for esync)
+if [ -d /proc/sys/fs/epoll ] || [ -c /dev/shm ]; then
+    # Esync: Use eventfd for synchronization (better performance)
+    export WINEESYNC=1
+    # Fsync: Use io_uring for synchronization (even better, requires kernel 5.1+)
+    # Check if io_uring is available (kernel 5.1+)
+    if [ -f /proc/sys/fs/aio-max-nr ] && [ "$(uname -r | cut -d. -f1)" -ge 5 ] 2>/dev/null; then
+        export WINEFSYNC=1
+    fi
+fi
 
 # Workarounds for known issues (GitHub Issues)
 

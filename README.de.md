@@ -10,9 +10,13 @@
 > Dein Feedback hilft, dieses Projekt für alle besser zu machen! 🙏
 
 > [!IMPORTANT]
-> **Getestete funktionierende Version**
+> **Getestete und funktionierende Versionen**
 > 
-> ✅ **Adobe Photoshop CC 2021 v22.0.0.35 x64** wurde erfolgreich getestet und funktioniert bestätigt mit der **Wine Standard** Installationsmethode.
+> ✅ **Adobe Photoshop CC 2021 (v22.x)** wurde erfolgreich getestet mit **Wine Standard** und **Proton GE** Installationsmethoden.
+> 
+> **Hinweis zu Versionsnummern**: Die von mir getestete spezifische Version ist **v22.0.0.35**, aber **jede Photoshop v22.x Version sollte funktionieren**. Die genaue Build-Nummer kann variieren, je nachdem woher du deine Installationsdateien hast.
+> 
+> 💡 **Empfehlung**: Versuche die Installation mit welcher Photoshop-Version auch immer du zur Verfügung hast. Wenn du CC 2021 (v22.x) hast, sollte es gut funktionieren!
 > 
 > ✅ **Proton GE Unterstützung**: Proton GE Installation funktioniert jetzt erfolgreich! Benutzer können Photoshop mit Proton GE installieren und ausführen. Proton GE wird automatisch installiert, falls es nicht gefunden wird.
 > 

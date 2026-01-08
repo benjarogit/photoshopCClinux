@@ -117,6 +117,9 @@ fi
 # Check Photoshop.exe
 PHOTOSHOP_EXE=""
 POSSIBLE_PATHS=(
+    "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop 2021/Photoshop.exe"
+    "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop 2022/Photoshop.exe"
+    "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop 2023/Photoshop.exe"
     "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop CC 2019/Photoshop.exe"
     "$WINE_PREFIX/drive_c/Program Files/Adobe/Adobe Photoshop CC 2018/Photoshop.exe"
     "$WINE_PREFIX/drive_c/users/$USER/PhotoshopSE/Photoshop.exe"

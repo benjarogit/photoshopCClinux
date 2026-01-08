@@ -43,6 +43,11 @@ export LC_ALL="${LC_ALL:-$LANG}"
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Source security module for input validation
+if [ -f "$SCRIPT_DIR/scripts/security.sh" ]; then
+    source "$SCRIPT_DIR/scripts/security.sh"
+fi
+
 # Initialize LANG_CODE (will be set by detect_language if not already set)
 LANG_CODE="${LANG_CODE:-}"
 
@@ -208,6 +213,19 @@ function show_wine_selection_menu() {
         echo -e "  ${C_YELLOW}[3]${C_RESET} ${C_WHITE}Back to main menu${C_RESET}"
         echo ""
         IFS= read -r -p "$(echo -e "${C_CYAN}Choose an option [1-3]:${C_RESET} ") " wine_choice
+        # CRITICAL: Sanitize and validate user input
+        if type security::sanitize_input >/dev/null 2>&1; then
+            wine_choice=$(security::sanitize_input "$wine_choice")
+        fi
+        # Validate input is 1-3
+        if [[ ! "$wine_choice" =~ ^[1-3]$ ]]; then
+            if [ "$LANG_CODE" = "de" ]; then
+                echo -e "${C_RED}Ungültige Eingabe. Bitte wähle 1, 2 oder 3.${C_RESET}"
+            else
+                echo -e "${C_RED}Invalid input. Please choose 1, 2, or 3.${C_RESET}"
+            fi
+            continue
+        fi
     fi
     
     case "$wine_choice" in
@@ -273,7 +291,7 @@ function main() {
 
     case "$answer" in
 
-    1)
+    1)  
         # Show Wine selection submenu
         show_wine_selection_menu
         ;;
@@ -513,14 +531,37 @@ function read_input() {
     while true ;do
         # KRITISCH: read -r verhindert Backslash-Interpretation
         IFS= read -r -p "$(msg_choose_option)" choose
+        
+        # CRITICAL: Sanitize and validate user input
+        if type security::sanitize_input >/dev/null 2>&1; then
+            choose=$(security::sanitize_input "$choose")
+        fi
+        
         # Accept 1-9 for menu selection
         if [[ "$choose" =~ ^[1-9]$ ]];then
             break
         fi
-        if [ "$LANG_CODE" = "de" ]; then
-            warning "Wähle eine Zahl zwischen 1 und 9"
+        
+        # Additional validation: reject empty input and dangerous patterns
+        if [ -z "$choose" ]; then
+            if [ "$LANG_CODE" = "de" ]; then
+                warning "Bitte wähle eine Option (1-9)"
+            else
+                warning "Please choose an option (1-9)"
+            fi
+        elif [[ "$choose" == *";"* ]] || [[ "$choose" == *"&"* ]] || [[ "$choose" == *"|"* ]] || [[ "$choose" == *"\`"* ]] || [[ "$choose" == *"\$"* ]] || [[ "$choose" == *"("* ]]; then
+            # Reject dangerous characters that might have passed sanitization
+            if [ "$LANG_CODE" = "de" ]; then
+                warning "Ungültige Eingabe erkannt. Bitte wähle eine Zahl zwischen 1 und 9"
+            else
+                warning "Invalid input detected. Please choose a number between 1 and 9"
+            fi
         else
-            warning "Choose a number between 1 and 9"
+            if [ "$LANG_CODE" = "de" ]; then
+                warning "Wähle eine Zahl zwischen 1 und 9"
+            else
+                warning "Choose a number between 1 and 9"
+            fi
         fi
     done
 
@@ -549,7 +590,7 @@ function get_system_info() {
 }
 
 function banner() {
-    clear && echo ""
+        clear && echo ""
     
     # Check if terminal supports colors (fallback for dumb terminals)
     # ANSI Color codes are now global (defined at script start)
