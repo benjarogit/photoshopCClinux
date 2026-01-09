@@ -2780,6 +2780,48 @@ configure_ie_engine() {
 }
 
 # ============================================================================
+# @function finish_installation
+# @description Show completion message and ask if user wants to start Photoshop
+# @return 0 on success
+# ============================================================================
+finish_installation() {
+    echo ""
+    output::success "$(i18n::get "installation_completed")"
+    echo ""
+    
+    # Ask user if they want to start Photoshop now
+    output::section "$(i18n::get "start_photoshop_question")"
+    local start_photoshop=false
+    local start_prompt="$(i18n::get "start_photoshop_prompt")"
+    log_prompt "$start_prompt"
+    IFS= read -r -p "$start_prompt" start_response
+    log_input "$start_response"
+    
+    # Default to yes if empty (Enter pressed)
+    if [ -z "$start_response" ] || [[ "$start_response" =~ ^[JjYy]$ ]]; then
+        start_photoshop=true
+    fi
+    
+    if [ "$start_photoshop" = true ]; then
+        echo ""
+        output::step "$(i18n::get "starting_photoshop")"
+        log "Starte Photoshop automatisch nach Installation..."
+        
+        # Start Photoshop in background (non-blocking)
+        if [ -f "$SCR_PATH/launcher/launcher.sh" ]; then
+            bash "$SCR_PATH/launcher/launcher.sh" >/dev/null 2>&1 &
+            local ps_pid=$!
+            log "Photoshop gestartet (PID: $ps_pid)"
+            output::success "$(i18n::get "photoshop_starting")"
+        else
+            output::error "$(i18n::get "launcher_not_found" "$SCR_PATH/launcher/launcher.sh")"
+        fi
+    else
+        output::info "$(i18n::get "photoshop_not_auto_start")"
+    fi
+}
+
+# ============================================================================
 # @function run_photoshop_installer
 # @description Run Adobe Photoshop installer and handle exit codes
 # @return 0 on success, 1 on error
