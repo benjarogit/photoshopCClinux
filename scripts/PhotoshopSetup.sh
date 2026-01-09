@@ -630,13 +630,15 @@ handle_wine_method_parameter() {
         return 1
     fi
     
-    log "Wine-Methode wurde per Parameter gesetzt: $WINE_METHOD"
-    log_debug "Wine-Methode Parameter: $WINE_METHOD"
-    debug_log "PhotoshopSetup.sh:484" "WINE_METHOD set via parameter" "{\"WINE_METHOD\":\"${WINE_METHOD}\"}" "H1"
+    # CRITICAL: Redirect all log output to stderr to prevent it from being captured
+    # This function returns only the index via stdout
+    log "Wine-Methode wurde per Parameter gesetzt: $WINE_METHOD" >&2
+    log_debug "Wine-Methode Parameter: $WINE_METHOD" >&2
+    debug_log "PhotoshopSetup.sh:484" "WINE_METHOD set via parameter" "{\"WINE_METHOD\":\"${WINE_METHOD}\"}" "H1" >&2
     
     local skip_text=$(i18n::get "skipping_interactive_selection")
     local wine_method_display=$([ "$WINE_METHOD" = "wine" ] && echo "Wine Standard" || echo "Proton GE")
-    log "$skip_text: $wine_method_display"
+    log "$skip_text: $wine_method_display" >&2
     
     # Find the matching option index
     local found=0
@@ -646,27 +648,27 @@ handle_wine_method_parameter() {
         if [ "$WINE_METHOD" = "proton" ] && [ "$path" = "system" ]; then
             selected_index=$index
             found=1
-            log_debug "Proton GE gefunden bei Index $index"
+            log_debug "Proton GE gefunden bei Index $index" >&2
             break
         elif [ "$WINE_METHOD" = "wine" ] && [ "$path" = "wine" ]; then
             selected_index=$index
             found=1
-            log_debug "Wine Standard gefunden bei Index $index"
+            log_debug "Wine Standard gefunden bei Index $index" >&2
             break
         fi
         ((index++))
     done
     
     if [ $found -eq 0 ]; then
-        log_error "Angeforderte Wine-Methode '$WINE_METHOD' nicht gefunden!"
+        log_error "Angeforderte Wine-Methode '$WINE_METHOD' nicht gefunden!" >&2
         local error_msg=$(i18n::get "wine_method_not_found")
-        error "$(printf "$error_msg" "$WINE_METHOD")"
+        error "$(printf "$error_msg" "$WINE_METHOD")" >&2
         echo ""  # Not found, fall through to interactive menu
         return 1
     else
         # Use the found selection and skip menu
-        log "Verwende automatisch ausgewählte Option: $selected_index"
-        echo "$selected_index"  # Return selected index
+        log "Verwende automatisch ausgewählte Option: $selected_index" >&2
+        echo "$selected_index"  # Return selected index (ONLY this goes to stdout)
         return 0  # Successfully handled
     fi
 }
