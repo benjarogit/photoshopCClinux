@@ -2058,10 +2058,10 @@ function main() {
         # Wine 10.x specific warnings
         if [ "$LANG_CODE" = "de" ]; then
             output::warning "Wine 10.x erkannt - Erweiterte Initialisierung (bis zu 90s)"
-            echo "  ${C_CYAN}→${C_RESET} Wine 10.x benötigt mehr Zeit für Prefix-Initialisierung..."
+            output::substep "Wine 10.x benötigt mehr Zeit für Prefix-Initialisierung..."
         else
             output::warning "Wine 10.x detected - Extended initialization (up to 90s)"
-            echo "  ${C_CYAN}→${C_RESET} Wine 10.x requires more time for prefix initialization..."
+            output::substep "Wine 10.x requires more time for prefix initialization..."
         fi
         echo ""
         
@@ -2549,7 +2549,8 @@ install_wine_components() {
     # CRITICAL: Protect PS_VERSION with ${PS_VERSION:-}
     # dotnet48 wird NUR für neuere Photoshop-Versionen (2021, 2022) benötigt, NICHT für CC 2019
     if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
-        output::step "$(i18n::get "installing_additional_components" "${PS_VERSION:-unknown}")"
+        local component_msg=$(i18n::get "installing_additional_components")
+        output::step "$(printf "$component_msg" "${PS_VERSION:-unknown}")"
         
         # dotnet48 wird für neuere Photoshop-Versionen benötigt
         # #region agent log
@@ -2563,16 +2564,46 @@ install_wine_components() {
         fi
         
         # Filter out Wine warnings - output to log only
+        # CRITICAL: .NET Framework 4.8 can take 10-30 minutes, so we add timeout protection
         winetricks -q dotnet48 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1 &
         local dotnet_pid=$!
         # #region agent log
         debug_log "PhotoshopSetup.sh:2178" "dotnet48 started in background" "{\"dotnet_pid\":${dotnet_pid}}" "H3"
         # #endregion
         
-        # Use spinner for long operation (simpler and more reliable)
-        spinner $dotnet_pid
-        wait $dotnet_pid
-        local dotnet_exit=$?
+        # Use spinner for long operation with timeout (max 30 minutes)
+        # Show periodic feedback that it's still running
+        local timeout_seconds=1800  # 30 minutes
+        local elapsed=0
+        local check_interval=60  # Check every minute
+        
+        while kill -0 $dotnet_pid 2>/dev/null && [ $elapsed -lt $timeout_seconds ]; do
+            sleep $check_interval
+            elapsed=$((elapsed + check_interval))
+            
+            # Show progress every 5 minutes
+            if [ $((elapsed % 300)) -eq 0 ] && [ $elapsed -gt 0 ]; then
+                local minutes=$((elapsed / 60))
+                if [ "$LANG_CODE" = "de" ]; then
+                    echo -e "\r${C_YELLOW}  ⏳ Läuft seit ${minutes} Minuten... (kann bis zu 30 Minuten dauern)${C_RESET}"
+                else
+                    echo -e "\r${C_YELLOW}  ⏳ Running for ${minutes} minutes... (can take up to 30 minutes)${C_RESET}"
+                fi
+            fi
+        done
+        
+        # Check if process is still running
+        if kill -0 $dotnet_pid 2>/dev/null; then
+            # Timeout reached - kill process
+            log_warning ".NET Framework installation timed out after 30 minutes"
+            kill $dotnet_pid 2>/dev/null
+            wait $dotnet_pid 2>/dev/null
+            local dotnet_exit=124  # Timeout exit code
+        else
+            # Process finished normally
+            wait $dotnet_pid
+            local dotnet_exit=$?
+        fi
         echo ""
         
         # #region agent log
