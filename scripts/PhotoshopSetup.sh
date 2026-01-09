@@ -2557,37 +2557,43 @@ install_wine_components() {
         # #endregion
         
         if [ "$LANG_CODE" = "de" ]; then
-            output::warning ".NET Framework 4.8 Installation (optional, kann sehr lange dauern)"
+            output::warning ".NET Framework 4.8 Installation (erforderlich, kann 30-60 Minuten dauern)"
             echo ""
-            echo "  Hinweis: .NET Framework ist optional und kann später manuell installiert werden."
-            echo "  Befehl: WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
+            echo "  WICHTIG: .NET Framework ist für Photoshop erforderlich!"
+            echo "  Die Installation dauert unter Wine 30-60 Minuten (manchmal länger) - das ist normal."
+            echo "  Der Installer ist ~70-120MB, installiert aber mehrere GB."
+            echo "  Wine-Emulation macht die Installation sehr langsam - bitte einfach laufen lassen."
             echo ""
-            read -p "$(echo -e "${C_YELLOW}.NET Framework jetzt installieren? [j/N]:${C_RESET} ") " dotnet_continue
-            if [[ ! "$dotnet_continue" =~ ^[JjYy]$ ]]; then
+            echo "  Falls du abbrechen möchtest, kannst du später manuell installieren:"
+            echo "  WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
+            echo ""
+            read -p "$(echo -e "${C_YELLOW}.NET Framework jetzt installieren? [J/n]:${C_RESET} ") " dotnet_continue
+            if [[ "$dotnet_continue" =~ ^[Nn]$ ]]; then
                 log_warning ".NET Framework Installation übersprungen (vom Benutzer abgebrochen)"
                 output::warning ".NET Framework Installation übersprungen - kann später manuell installiert werden"
                 return 0  # Skip dotnet installation
             fi
             echo ""
-            if [ "$LANG_CODE" = "de" ]; then
-                output::spinner_line "Installiere .NET Framework 4.8 (kann 15-30 Minuten dauern)..."
-            else
-                output::spinner_line "Installing .NET Framework 4.8 (can take 15-30 minutes)..."
-            fi
+            output::spinner_line "Installiere .NET Framework 4.8 (kann 30-60 Minuten dauern, bitte warten)..."
         else
-            output::warning ".NET Framework 4.8 installation (optional, can take very long)"
+            output::warning ".NET Framework 4.8 installation (required, can take 30-60 minutes)"
             echo ""
-            echo "  Note: .NET Framework is optional and can be installed manually later."
-            echo "  Command: WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
+            echo "  IMPORTANT: .NET Framework is required for Photoshop!"
+            echo "  Installation takes 30-60 minutes under Wine (sometimes longer) - this is normal."
+            echo "  Installer is ~70-120MB, but installs several GB."
+            echo "  Wine emulation makes installation very slow - please just let it run."
             echo ""
-            read -p "$(echo -e "${C_YELLOW}Install .NET Framework now? [y/N]:${C_RESET} ") " dotnet_continue
-            if [[ ! "$dotnet_continue" =~ ^[JjYy]$ ]]; then
+            echo "  If you want to cancel, you can install manually later:"
+            echo "  WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
+            echo ""
+            read -p "$(echo -e "${C_YELLOW}Install .NET Framework now? [Y/n]:${C_RESET} ") " dotnet_continue
+            if [[ "$dotnet_continue" =~ ^[Nn]$ ]]; then
                 log_warning ".NET Framework installation skipped (user cancelled)"
                 output::warning ".NET Framework installation skipped - can be installed manually later"
                 return 0  # Skip dotnet installation
             fi
             echo ""
-            output::spinner_line "Installing .NET Framework 4.8 (can take 15-30 minutes)..."
+            output::spinner_line "Installing .NET Framework 4.8 (can take 30-60 minutes, please wait)..."
         fi
         
         # Filter out Wine warnings - output to log only
@@ -2598,9 +2604,9 @@ install_wine_components() {
         debug_log "PhotoshopSetup.sh:2178" "dotnet48 started in background" "{\"dotnet_pid\":${dotnet_pid}}" "H3"
         # #endregion
         
-        # Use spinner for long operation with timeout (max 30 minutes)
+        # Use spinner for long operation with timeout (max 90 minutes for Wine)
         # Show spinner while process is running
-        local timeout_seconds=1800  # 30 minutes
+        local timeout_seconds=5400  # 90 minutes (Wine emulation is slow)
         local elapsed=0
         local check_interval=1  # Check every second for spinner
         local last_progress_update=0
@@ -2619,9 +2625,9 @@ install_wine_components() {
                 if [ $((elapsed % 120)) -eq 0 ] && [ $elapsed -gt 0 ]; then
                     local minutes=$((elapsed / 60))
                     if [ "$LANG_CODE" = "de" ]; then
-                        printf "\r  ⏳ Läuft seit %d Minuten... (kann bis zu 30 Minuten dauern)    " "$minutes"
+                        printf "\r  ⏳ Läuft seit %d Minuten... (kann 30-60 Minuten dauern, bitte warten)    " "$minutes"
                     else
-                        printf "\r  ⏳ Running for %d minutes... (can take up to 30 minutes)    " "$minutes"
+                        printf "\r  ⏳ Running for %d minutes... (can take 30-60 minutes, please wait)    " "$minutes"
                     fi
                     sleep 2
                 fi
@@ -2637,9 +2643,10 @@ install_wine_components() {
         kill $spinner_pid 2>/dev/null
         wait $spinner_pid 2>/dev/null
         
-        # Check if timeout was reached
-        if [ $elapsed -ge $timeout_seconds ]; then
-            log_warning ".NET Framework installation timed out after 30 minutes"
+        # Check if timeout was reached (extended to 90 minutes for Wine)
+        local extended_timeout=5400  # 90 minutes
+        if [ $elapsed -ge $extended_timeout ]; then
+            log_warning ".NET Framework installation timed out after 90 minutes"
             kill $dotnet_pid 2>/dev/null
             wait $dotnet_pid 2>/dev/null
             dotnet_exit=124  # Timeout exit code
