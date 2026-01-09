@@ -2138,10 +2138,13 @@ function main() {
     # BEST PRACTICE: Disable Wine Desktop Integration to prevent .lnk files and incorrect desktop entries
     # This prevents Wine from automatically creating desktop shortcuts during installation
     # Registry key: [Software\\Wine\\Explorer\\Desktop] "Enable"="N"
+    # CRITICAL: Also disable via WINEDLLOVERRIDES to prevent .lnk creation during installer
     # #region agent log
     debug_log "PhotoshopSetup.sh:2024" "Disabling Wine Desktop Integration" "{\"WINE_PREFIX\":\"${WINE_PREFIX}\"}" "H4"
     # #endregion
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Explorer\\Desktop" /v "Enable" /t REG_SZ /d "N" /f >> "$LOG_FILE" 2>&1 || true
+    # CRITICAL: Also set via WINEDLLOVERRIDES to prevent .lnk creation during Adobe installer
+    export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-};desktop=n"
     log_debug "Wine Desktop Integration disabled (prevents .lnk files and incorrect desktop entries)"
     
     # Now run winecfg to configure the prefix
@@ -2384,17 +2387,21 @@ function main() {
     fi
     
     # Remove .lnk files (Windows shortcuts - unusable on Linux) and correct desktop entries
+    # CRITICAL: Check multiple times as Adobe installer may create .lnk files during installation
     local desktop_dirs=("$HOME/Desktop" "$HOME/Schreibtisch" "$HOME/desktop" "$HOME/schreibtisch")
     for desktop_dir in "${desktop_dirs[@]}"; do
         if [ -d "$desktop_dir" ]; then
-            # Remove .lnk files (Windows shortcuts)
-            find "$desktop_dir" -maxdepth 1 -type f -name "*.lnk" 2>/dev/null | while IFS= read -r lnk_file; do
-                if [ -f "$lnk_file" ]; then
-                    # #region agent log
-                    debug_log "PhotoshopSetup.sh:2330" "Removing .lnk file (Windows shortcut)" "{\"lnk_file\":\"${lnk_file}\"}" "H4"
-                    # #endregion
-                    rm -f "$lnk_file" 2>/dev/null || true
-                fi
+            # Remove .lnk files (Windows shortcuts) - check multiple times
+            for i in 1 2 3; do
+                find "$desktop_dir" -maxdepth 1 -type f \( -name "*.lnk" -o -name "*Photoshop*.lnk" -o -name "*Adobe*.lnk" \) 2>/dev/null | while IFS= read -r lnk_file; do
+                    if [ -f "$lnk_file" ]; then
+                        # #region agent log
+                        debug_log "PhotoshopSetup.sh:2330" "Removing .lnk file (Windows shortcut)" "{\"lnk_file\":\"${lnk_file}\"}" "H4"
+                        # #endregion
+                        rm -f "$lnk_file" 2>/dev/null || true
+                    fi
+                done
+                sleep 0.5  # Brief pause between checks
             done
             # Correct Wine-generated desktop entries
             find "$desktop_dir" -maxdepth 1 -type f \( -name "*Photoshop*.desktop" -o -name "*Adobe*.desktop" \) ! -name "photoshop.desktop" 2>/dev/null | while IFS= read -r entry; do
