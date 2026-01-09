@@ -2574,7 +2574,11 @@ install_wine_components() {
                 return 0  # Skip dotnet installation
             fi
             echo ""
-            output::spinner_line "Installiere .NET Framework 4.8 (kann 30-60 Minuten dauern, bitte warten)..."
+            if [ "$LANG_CODE" = "de" ]; then
+                echo -ne "${C_YELLOW}→${C_RESET} ${C_CYAN}Installiere .NET Framework 4.8 (kann 30-60 Minuten dauern, bitte warten)...${C_RESET} "
+            else
+                echo -ne "${C_YELLOW}→${C_RESET} ${C_CYAN}Installing .NET Framework 4.8 (can take 30-60 minutes, please wait)...${C_RESET} "
+            fi
         else
             output::warning ".NET Framework 4.8 installation (required, can take 30-60 minutes)"
             echo ""
@@ -2593,64 +2597,44 @@ install_wine_components() {
                 return 0  # Skip dotnet installation
             fi
             echo ""
-            output::spinner_line "Installing .NET Framework 4.8 (can take 30-60 minutes, please wait)..."
+            echo -ne "${C_YELLOW}→${C_RESET} ${C_CYAN}Installing .NET Framework 4.8 (can take 30-60 minutes, please wait)...${C_RESET} "
         fi
         
         # Filter out Wine warnings - output to log only
-        # CRITICAL: .NET Framework 4.8 can take 10-30 minutes, so we add timeout protection
+        # CRITICAL: .NET Framework 4.8 can take 30-90 minutes, so we add timeout protection
         winetricks -q dotnet48 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1 &
         local dotnet_pid=$!
         # #region agent log
         debug_log "PhotoshopSetup.sh:2178" "dotnet48 started in background" "{\"dotnet_pid\":${dotnet_pid}}" "H3"
         # #endregion
         
-        # Use spinner for long operation with timeout (max 90 minutes for Wine)
-        # Show spinner while process is running
-        local timeout_seconds=5400  # 90 minutes (Wine emulation is slow)
-        local elapsed=0
-        local check_interval=1  # Check every second for spinner
-        local last_progress_update=0
-        
-        # Start spinner in background
+        # Use simple spinner function that works properly
+        # Show progress updates every 2 minutes in background
         (
-            while kill -0 $dotnet_pid 2>/dev/null && [ $elapsed -lt $timeout_seconds ]; do
-                local spinstr='|/-\'
-                local temp=${spinstr#?}
-                printf "\r  %s " "${spinstr}"
-                spinstr=${temp}${spinstr%"$temp"}
-                sleep 0.2
-                elapsed=$((elapsed + 1))
-                
-                # Show progress every 2 minutes (120 seconds)
-                if [ $((elapsed % 120)) -eq 0 ] && [ $elapsed -gt 0 ]; then
-                    local minutes=$((elapsed / 60))
-                    if [ "$LANG_CODE" = "de" ]; then
-                        printf "\r  ⏳ Läuft seit %d Minuten... (kann 30-60 Minuten dauern, bitte warten)    " "$minutes"
-                    else
-                        printf "\r  ⏳ Running for %d minutes... (can take 30-60 minutes, please wait)    " "$minutes"
-                    fi
-                    sleep 2
+            local elapsed=0
+            while kill -0 $dotnet_pid 2>/dev/null; do
+                sleep 120  # Wait 2 minutes
+                elapsed=$((elapsed + 120))
+                local minutes=$((elapsed / 60))
+                if [ "$LANG_CODE" = "de" ]; then
+                    printf "\r${C_YELLOW}→${C_RESET} ${C_CYAN}Installiere .NET Framework 4.8... (läuft seit %d Minuten, kann 30-60 Minuten dauern)${C_RESET}    " "$minutes"
+                else
+                    printf "\r${C_YELLOW}→${C_RESET} ${C_CYAN}Installing .NET Framework 4.8... (running for %d minutes, can take 30-60 minutes)${C_RESET}    " "$minutes"
                 fi
             done
         ) &
-        local spinner_pid=$!
+        local progress_pid=$!
         
-        # Wait for dotnet process
+        # Use the existing spinner function which works properly
+        spinner $dotnet_pid
+        
+        # Stop progress updates
+        kill $progress_pid 2>/dev/null
+        wait $progress_pid 2>/dev/null
+        
+        # Wait for dotnet process to finish
         wait $dotnet_pid
         local dotnet_exit=$?
-        
-        # Stop spinner
-        kill $spinner_pid 2>/dev/null
-        wait $spinner_pid 2>/dev/null
-        
-        # Check if timeout was reached (extended to 90 minutes for Wine)
-        local extended_timeout=5400  # 90 minutes
-        if [ $elapsed -ge $extended_timeout ]; then
-            log_warning ".NET Framework installation timed out after 90 minutes"
-            kill $dotnet_pid 2>/dev/null
-            wait $dotnet_pid 2>/dev/null
-            dotnet_exit=124  # Timeout exit code
-        fi
         
         echo ""  # New line after spinner
         
