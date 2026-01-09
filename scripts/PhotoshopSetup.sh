@@ -2610,12 +2610,19 @@ install_wine_components() {
         
         # Use simple spinner function that works properly
         # Show progress updates every 2 minutes in background
+        # CRITICAL: Store start time to calculate actual elapsed time
+        local start_time=$(date +%s)
         (
-            local elapsed=0
+            local update_count=0
             while kill -0 $dotnet_pid 2>/dev/null; do
                 sleep 120  # Wait 2 minutes
-                elapsed=$((elapsed + 120))
-                local minutes=$((elapsed / 60))
+                update_count=$((update_count + 1))
+                
+                # Calculate actual elapsed time from start
+                local current_time=$(date +%s)
+                local elapsed_seconds=$((current_time - start_time))
+                local minutes=$((elapsed_seconds / 60))
+                
                 if [ "$LANG_CODE" = "de" ]; then
                     printf "\r${C_YELLOW}→${C_RESET} ${C_CYAN}Installiere .NET Framework 4.8... (läuft seit %d Minuten, kann 30-60 Minuten dauern)${C_RESET}    " "$minutes"
                 else
