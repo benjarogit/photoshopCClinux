@@ -2560,9 +2560,9 @@ install_wine_components() {
         if [ "$LANG_CODE" = "de" ]; then
             output::warning "⚠ .NET Framework 4.8 Installation kann 15-30 Minuten dauern!"
             echo ""
-            echo "  ${C_CYAN}→${C_RESET} Dies ist normal - .NET Framework ist sehr groß (~200MB)"
-            echo "  ${C_CYAN}→${C_RESET} Du kannst die Installation abbrechen (STRG+C) und später manuell installieren:"
-            echo "     ${C_GRAY}WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48${C_RESET}"
+            output::substep "Dies ist normal - .NET Framework ist sehr groß (~200MB)"
+            output::substep "Du kannst die Installation abbrechen (STRG+C) und später manuell installieren:"
+            echo "     WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
             echo ""
             read -p "$(echo -e "${C_YELLOW}Fortfahren mit .NET Framework Installation? [J/n]:${C_RESET} ") " dotnet_continue
             if [[ "$dotnet_continue" =~ ^[Nn]$ ]]; then
@@ -2579,9 +2579,9 @@ install_wine_components() {
         else
             output::warning "⚠ .NET Framework 4.8 installation can take 15-30 minutes!"
             echo ""
-            echo "  ${C_CYAN}→${C_RESET} This is normal - .NET Framework is very large (~200MB)"
-            echo "  ${C_CYAN}→${C_RESET} You can cancel (CTRL+C) and install manually later:"
-            echo "     ${C_GRAY}WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48${C_RESET}"
+            output::substep "This is normal - .NET Framework is very large (~200MB)"
+            output::substep "You can cancel (CTRL+C) and install manually later:"
+            echo "     WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
             echo ""
             read -p "$(echo -e "${C_YELLOW}Continue with .NET Framework installation? [Y/n]:${C_RESET} ") " dotnet_continue
             if [[ "$dotnet_continue" =~ ^[Nn]$ ]]; then
