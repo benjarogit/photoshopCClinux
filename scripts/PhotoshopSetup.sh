@@ -1459,7 +1459,8 @@ select_wine_version() {
     done
     
     # If only one option available, use it automatically (no menu)
-    if [ $count -eq 1 ]; then
+    # BUT: Skip if selection is already set via command line parameter
+    if [ $count -eq 1 ] && [ -z "$selection" ]; then
         local single_selection
         single_selection=$(handle_single_wine_option "$system" "$has_proton")
         if [ $? -ne 0 ]; then
