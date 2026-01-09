@@ -2558,9 +2558,39 @@ install_wine_components() {
         # #endregion
         
         if [ "$LANG_CODE" = "de" ]; then
+            output::warning "⚠ .NET Framework 4.8 Installation kann 15-30 Minuten dauern!"
+            echo ""
+            echo "  ${C_CYAN}→${C_RESET} Dies ist normal - .NET Framework ist sehr groß (~200MB)"
+            echo "  ${C_CYAN}→${C_RESET} Du kannst die Installation abbrechen (STRG+C) und später manuell installieren:"
+            echo "     ${C_GRAY}WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48${C_RESET}"
+            echo ""
+            read -p "$(echo -e "${C_YELLOW}Fortfahren mit .NET Framework Installation? [J/n]:${C_RESET} ") " dotnet_continue
+            if [[ "$dotnet_continue" =~ ^[Nn]$ ]]; then
+                log_warning ".NET Framework Installation übersprungen (vom Benutzer abgebrochen)"
+                if [ "$LANG_CODE" = "de" ]; then
+                    output::warning ".NET Framework Installation übersprungen - kann später manuell installiert werden"
+                else
+                    output::warning ".NET Framework installation skipped - can be installed manually later"
+                fi
+                return 0  # Skip dotnet installation
+            fi
+            echo ""
             output::spinner_line "$(i18n::get "installing_dotnet")"
         else
-            output::spinner_line "Installing .NET Framework 4.8 (takes 10-20 minutes)..."
+            output::warning "⚠ .NET Framework 4.8 installation can take 15-30 minutes!"
+            echo ""
+            echo "  ${C_CYAN}→${C_RESET} This is normal - .NET Framework is very large (~200MB)"
+            echo "  ${C_CYAN}→${C_RESET} You can cancel (CTRL+C) and install manually later:"
+            echo "     ${C_GRAY}WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48${C_RESET}"
+            echo ""
+            read -p "$(echo -e "${C_YELLOW}Continue with .NET Framework installation? [Y/n]:${C_RESET} ") " dotnet_continue
+            if [[ "$dotnet_continue" =~ ^[Nn]$ ]]; then
+                log_warning ".NET Framework installation skipped (user cancelled)"
+                output::warning ".NET Framework installation skipped - can be installed manually later"
+                return 0  # Skip dotnet installation
+            fi
+            echo ""
+            output::spinner_line "Installing .NET Framework 4.8 (takes 15-30 minutes)..."
         fi
         
         # Filter out Wine warnings - output to log only
@@ -2572,23 +2602,21 @@ install_wine_components() {
         # #endregion
         
         # Use spinner for long operation with timeout (max 30 minutes)
-        # Show periodic feedback that it's still running
+        # Show periodic feedback that it's still running (every 2 minutes)
         local timeout_seconds=1800  # 30 minutes
         local elapsed=0
-        local check_interval=60  # Check every minute
+        local check_interval=120  # Check every 2 minutes
         
         while kill -0 $dotnet_pid 2>/dev/null && [ $elapsed -lt $timeout_seconds ]; do
             sleep $check_interval
             elapsed=$((elapsed + check_interval))
             
-            # Show progress every 5 minutes
-            if [ $((elapsed % 300)) -eq 0 ] && [ $elapsed -gt 0 ]; then
-                local minutes=$((elapsed / 60))
-                if [ "$LANG_CODE" = "de" ]; then
-                    echo -e "\r${C_YELLOW}  ⏳ Läuft seit ${minutes} Minuten... (kann bis zu 30 Minuten dauern)${C_RESET}"
-                else
-                    echo -e "\r${C_YELLOW}  ⏳ Running for ${minutes} minutes... (can take up to 30 minutes)${C_RESET}"
-                fi
+            # Show progress every 2 minutes
+            local minutes=$((elapsed / 60))
+            if [ "$LANG_CODE" = "de" ]; then
+                echo -e "\r${C_YELLOW}  ⏳ Läuft seit ${minutes} Minuten... (kann bis zu 30 Minuten dauern)${C_RESET}    "
+            else
+                echo -e "\r${C_YELLOW}  ⏳ Running for ${minutes} minutes... (can take up to 30 minutes)${C_RESET}    "
             fi
         done
         
