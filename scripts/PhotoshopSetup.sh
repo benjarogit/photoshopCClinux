@@ -1484,9 +1484,14 @@ select_wine_version() {
     
     # Find selected option index
     local selected_index
+    log_debug "DEBUG: selection='$selection'"
+    log_debug "DEBUG: WINE_OPTIONS=(${WINE_OPTIONS[*]})"
+    log_debug "DEBUG: WINE_PATHS=(${WINE_PATHS[*]})"
     selected_index=$(find_selected_wine_index "$selection")
+    log_debug "DEBUG: selected_index=$selected_index"
     
     if [ "$selected_index" = "-1" ]; then
+        log_error "DEBUG: Selection '$selection' not found in WINE_OPTIONS=(${WINE_OPTIONS[*]})"
         error "$(i18n::get "selection_not_found")"
         return 1
     fi
