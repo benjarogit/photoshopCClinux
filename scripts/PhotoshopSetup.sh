@@ -869,7 +869,7 @@ install_proton_ge_auto() {
             local latest_version=$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | head -1)
             
             if [ -z "$latest_version" ]; then
-                latest_version="GE-Proton10-26"  # Fallback version
+                latest_version="GE-Proton10-28"  # Fallback version (updated 2025-01-09)
                 log "  ⚠ Konnte neueste Version nicht ermitteln, verwende Fallback: $latest_version"
             else
                 log "  → Neueste Version gefunden: $latest_version"
@@ -1114,7 +1114,7 @@ install_proton_ge_interactive() {
             local latest_version=$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | head -1)
             
             if [ -z "$latest_version" ]; then
-                latest_version="GE-Proton10-26"
+                latest_version="GE-Proton10-28"  # Fallback version (updated 2025-01-09)
                 log "  ⚠ Konnte neueste Version nicht ermitteln, verwende Fallback: $latest_version"
             else
                 log "  → Neueste Version gefunden: $latest_version"
