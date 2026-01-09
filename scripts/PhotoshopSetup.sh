@@ -1974,16 +1974,48 @@ function main() {
     RESOURCES_PATH="$SCR_PATH/resources"
     WINE_PREFIX="$SCR_PATH/prefix"
     
-    #create new wine prefix for photoshop
-    rmdir_if_exist $WINE_PREFIX
+    # CRITICAL: Kill ALL Wine processes before starting installation
+    # This prevents conflicts, version mismatches, and ensures clean installation
+    output::step "Beende alle Wine-Prozesse vor Installation..."
+    if [ "$LANG_CODE" = "de" ]; then
+        output::substep "Beende alle laufenden Wine/Photoshop Prozesse..."
+    else
+        output::substep "Terminating all running Wine/Photoshop processes..."
+    fi
     
-    # CRITICAL: Kill any existing wineserver that might be using the wrong Wine binary
-    # This prevents "version mismatch" errors when switching between Wine Standard and Proton GE
+    # Kill Photoshop processes
+    pkill -f "Photoshop.exe" 2>/dev/null && log_debug "Photoshop Prozesse beendet" || log_debug "Keine Photoshop Prozesse gefunden"
+    
+    # Kill all wineserver instances
     if command -v wineserver >/dev/null 2>&1; then
         wineserver -k 2>/dev/null || true
         # Wait for wineserver to fully terminate (polling instead of fixed sleep)
         wait::for_process "$(pgrep wineserver 2>/dev/null || echo "")" 5 0.2 2>/dev/null || true
+        log_debug "Wine Server beendet"
     fi
+    
+    # Kill any remaining wine processes for this prefix
+    if [ -d "$WINE_PREFIX" ]; then
+        export WINEPREFIX="$WINE_PREFIX"
+        wineserver -k 2>/dev/null || true
+        pkill -f "wine.*Photoshop" 2>/dev/null || true
+        unset WINEPREFIX
+        log_debug "Wine Prozesse für Prefix beendet"
+    fi
+    
+    # Kill any other wine processes
+    pkill -f "wine.*${SCR_PATH}" 2>/dev/null || true
+    sleep 1
+    
+    if [ "$LANG_CODE" = "de" ]; then
+        output::success "Alle Wine-Prozesse beendet"
+    else
+        output::success "All Wine processes terminated"
+    fi
+    echo ""
+    
+    #create new wine prefix for photoshop
+    rmdir_if_exist $WINE_PREFIX
     
     # CRITICAL: Set WINEARCH BEFORE export_var (required for 64-bit prefix initialization)
     export WINEARCH=win64
@@ -2033,6 +2065,43 @@ function main() {
     debug_log "PhotoshopSetup.sh:1970" "WINEARCH set" "{\"WINEARCH\":\"${WINEARCH}\",\"WINE_PREFIX\":\"${WINE_PREFIX}\"}" "H2"
     # #endregion
     
+    # ============================================================================
+    # WOW64 Mode Information and Option (Wine 10.x+)
+    # ============================================================================
+    local wine_version_output=$("$wine_binary" --version 2>/dev/null | head -1)
+    local wine_major=$(echo "$wine_version_output" | grep -oP '(?<=wine-)[\d]+' | head -1)
+    local enable_wow64=true  # Default: enabled
+    
+    if [ -n "$wine_major" ] && [ "$wine_major" -ge 10 ]; then
+        # Wine 10.x+ has experimental WOW64 mode
+        if [ "$LANG_CODE" = "de" ]; then
+            echo ""
+            output::warning "ℹ WOW64-Modus (Wine 10.x+)"
+            echo "  Wine 10.x verwendet den experimentellen WOW64-Modus."
+            echo "  Dies ermöglicht bessere Kompatibilität, kann aber Warnungen erzeugen."
+            echo "  Standard: Aktiviert (empfohlen)"
+            echo ""
+            read -p "$(echo -e "${C_YELLOW}WOW64-Modus aktivieren? [J/n]:${C_RESET} ") " wow64_response
+            if [[ "$wow64_response" =~ ^[Nn]$ ]]; then
+                enable_wow64=false
+                log_debug "WOW64-Modus deaktiviert (vom Benutzer)"
+            fi
+        else
+            echo ""
+            output::warning "ℹ WOW64 Mode (Wine 10.x+)"
+            echo "  Wine 10.x uses experimental WOW64 mode."
+            echo "  This provides better compatibility but may show warnings."
+            echo "  Default: Enabled (recommended)"
+            echo ""
+            read -p "$(echo -e "${C_YELLOW}Enable WOW64 mode? [Y/n]:${C_RESET} ") " wow64_response
+            if [[ "$wow64_response" =~ ^[Nn]$ ]]; then
+                enable_wow64=false
+                log_debug "WOW64 mode disabled (by user)"
+            fi
+        fi
+        echo ""
+    fi
+    
     # CRITICAL: Suppress Wine warnings to reduce log noise
     # WINEDEBUG=-all suppresses all warnings, but we keep errors visible
     # This reduces the 202x 64-bit/WOW64 warnings significantly
@@ -2041,8 +2110,6 @@ function main() {
     # ============================================================================
     # Wine 10.x Detection and Workarounds (GitHub Issue - Wine 10.20 WOW64)
     # ============================================================================
-    local wine_version_output=$("$wine_binary" --version 2>/dev/null | head -1)
-    local wine_major=$(echo "$wine_version_output" | grep -oP '(?<=wine-)[\d]+' | head -1)
     local is_wine_10=0
     local wineboot_timeout=30
     local wait_timeout=30
@@ -2065,8 +2132,14 @@ function main() {
         fi
         echo ""
         
-        # Suppress WOW64 errors for Wine 10.x
-        export WINEDEBUG=-all,fixme-all,err-environ
+        # Suppress WOW64 errors for Wine 10.x (if enabled)
+        if [ "$enable_wow64" = true ]; then
+            export WINEDEBUG=-all,fixme-all,err-environ
+        else
+            # Disable WOW64 if user chose to
+            export WINE_DISABLE_WOW64=1
+            log_debug "WOW64 disabled via WINE_DISABLE_WOW64=1"
+        fi
     fi
     # ============================================================================
     
@@ -2556,121 +2629,9 @@ install_wine_components() {
     # CRITICAL: Protect PS_VERSION with ${PS_VERSION:-}
     # dotnet48 ist OPTIONAL für neuere Photoshop-Versionen (2021, 2022)
     # Nur installieren wenn der Benutzer es möchte - Installation dauert sehr lange (30-60+ Minuten)
+    # NOTE: .NET Framework wird jetzt in finish_installation() angeboten (nach Photoshop Installation)
     if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
         output::step "$(i18n::get "installing_additional_components")"
-        
-        # dotnet48 ist optional - nur bei Problemen mit Photoshop benötigt
-        # #region agent log
-        debug_log "PhotoshopSetup.sh:2176" "Before dotnet48 installation" "{\"PS_VERSION\":\"${PS_VERSION:-unknown}\",\"WINEPREFIX\":\"${WINEPREFIX:-}\"}" "H3"
-        # #endregion
-        
-        if [ "$LANG_CODE" = "de" ]; then
-            output::warning ".NET Framework 4.8 Installation (OPTIONAL, kann 30-60 Minuten dauern)"
-            echo ""
-            echo "  HINWEIS: .NET Framework ist OPTIONAL und wird nur bei bestimmten Problemen benötigt."
-            echo "  Die Installation dauert unter Wine 30-60 Minuten (manchmal länger) - das ist normal."
-            echo "  Der Installer ist ~70-120MB, installiert aber mehrere GB."
-            echo "  Wine-Emulation macht die Installation sehr langsam."
-            echo ""
-            echo "  EMPFEHLUNG: Überspringe die Installation zunächst. Falls Photoshop Probleme macht,"
-            echo "  kannst du es später manuell installieren:"
-            echo "  WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
-            echo ""
-            read -p "$(echo -e "${C_YELLOW}.NET Framework jetzt installieren? [j/N]:${C_RESET} ") " dotnet_continue
-            if [[ ! "$dotnet_continue" =~ ^[JjYy]$ ]]; then
-                log_warning ".NET Framework Installation übersprungen (vom Benutzer abgebrochen)"
-                output::success ".NET Framework Installation übersprungen - kann später manuell installiert werden falls nötig"
-                return 0  # Skip dotnet installation
-            fi
-            echo ""
-            if [ "$LANG_CODE" = "de" ]; then
-                echo -ne "${C_YELLOW}→${C_RESET} ${C_CYAN}Installiere .NET Framework 4.8 (kann 30-60 Minuten dauern, bitte warten)...${C_RESET} "
-            else
-                echo -ne "${C_YELLOW}→${C_RESET} ${C_CYAN}Installing .NET Framework 4.8 (can take 30-60 minutes, please wait)...${C_RESET} "
-            fi
-        else
-            output::warning ".NET Framework 4.8 installation (OPTIONAL, can take 30-60 minutes)"
-            echo ""
-            echo "  NOTE: .NET Framework is OPTIONAL and only needed for certain issues."
-            echo "  Installation takes 30-60 minutes under Wine (sometimes longer) - this is normal."
-            echo "  Installer is ~70-120MB, but installs several GB."
-            echo "  Wine emulation makes installation very slow."
-            echo ""
-            echo "  RECOMMENDATION: Skip installation for now. If Photoshop has issues,"
-            echo "  you can install it manually later:"
-            echo "  WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
-            echo ""
-            read -p "$(echo -e "${C_YELLOW}Install .NET Framework now? [y/N]:${C_RESET} ") " dotnet_continue
-            if [[ ! "$dotnet_continue" =~ ^[YyJj]$ ]]; then
-                log_warning ".NET Framework installation skipped (user cancelled)"
-                output::success ".NET Framework installation skipped - can be installed manually later if needed"
-                return 0  # Skip dotnet installation
-            fi
-            echo ""
-            echo -ne "${C_YELLOW}→${C_RESET} ${C_CYAN}Installing .NET Framework 4.8 (can take 30-60 minutes, please wait)...${C_RESET} "
-        fi
-        
-        # Filter out Wine warnings - output to log only
-        # CRITICAL: .NET Framework 4.8 can take 30-90 minutes, so we add timeout protection
-        winetricks -q dotnet48 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1 &
-        local dotnet_pid=$!
-        # #region agent log
-        debug_log "PhotoshopSetup.sh:2178" "dotnet48 started in background" "{\"dotnet_pid\":${dotnet_pid}}" "H3"
-        # #endregion
-        
-        # Use simple spinner function that works properly
-        # Show progress updates every 2 minutes in background
-        # CRITICAL: Store start time to calculate actual elapsed time
-        local start_time=$(date +%s)
-        (
-            local update_count=0
-            while kill -0 $dotnet_pid 2>/dev/null; do
-                sleep 120  # Wait 2 minutes
-                update_count=$((update_count + 1))
-                
-                # Calculate actual elapsed time from start
-                local current_time=$(date +%s)
-                local elapsed_seconds=$((current_time - start_time))
-                local minutes=$((elapsed_seconds / 60))
-                
-                if [ "$LANG_CODE" = "de" ]; then
-                    printf "\r${C_YELLOW}→${C_RESET} ${C_CYAN}Installiere .NET Framework 4.8... (läuft seit %d Minuten, kann 30-60 Minuten dauern)${C_RESET}    " "$minutes"
-                else
-                    printf "\r${C_YELLOW}→${C_RESET} ${C_CYAN}Installing .NET Framework 4.8... (running for %d minutes, can take 30-60 minutes)${C_RESET}    " "$minutes"
-                fi
-            done
-        ) &
-        local progress_pid=$!
-        
-        # Use the existing spinner function which works properly
-        spinner $dotnet_pid
-        
-        # Stop progress updates
-        kill $progress_pid 2>/dev/null
-        wait $progress_pid 2>/dev/null
-        
-        # Wait for dotnet process to finish
-        wait $dotnet_pid
-        local dotnet_exit=$?
-        
-        echo ""  # New line after spinner
-        
-        # #region agent log
-        debug_log "PhotoshopSetup.sh:2181" "dotnet48 installation completed" "{\"dotnet_exit\":${dotnet_exit},\"dotnet_pid\":${dotnet_pid}}" "H3"
-        # #endregion
-        if [ $dotnet_exit -eq 0 ]; then
-            if [ "$LANG_CODE" = "de" ]; then
-                output::success "$(i18n::get "dotnet_installed")"
-            else
-                output::success ".NET Framework 4.8 installed successfully"
-            fi
-        else
-            if [ "$LANG_CODE" = "de" ]; then
-                output::warning "$(i18n::get "dotnet_failed")"
-            else
-                output::warning ".NET Framework 4.8 installation failed (optional)"
-            fi
-        fi
         
         # vcrun2019 für neuere Versionen (optional, nur für 2021/2022)
         if [ "$LANG_CODE" = "de" ]; then
@@ -2795,6 +2756,89 @@ finish_installation() {
     echo ""
     output::success "$(i18n::get "installation_completed")"
     echo ""
+    
+    # Ask about .NET Framework installation (recommended for compatibility)
+    if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
+        if [ "$LANG_CODE" = "de" ]; then
+            echo ""
+            output::warning "ℹ .NET Framework 4.8 Installation (EMPFOHLEN)"
+            echo "  .NET Framework wird für bessere Kompatibilität empfohlen."
+            echo "  Installation dauert 30-60 Minuten (manchmal länger) - das ist normal."
+            echo "  Installer: ~70-120MB, installiert aber mehrere GB."
+            echo ""
+            read -p "$(echo -e "${C_YELLOW}.NET Framework jetzt installieren? [J/n]:${C_RESET} ") " dotnet_install
+            if [[ ! "$dotnet_install" =~ ^[Nn]$ ]]; then
+                echo ""
+                output::step "Beende Wine-Prozesse für .NET Framework Installation..."
+                
+                # CRITICAL: Kill all Wine processes before .NET Framework installation
+                pkill -f "Photoshop.exe" 2>/dev/null || true
+                if command -v wineserver >/dev/null 2>&1; then
+                    wineserver -k 2>/dev/null || true
+                    wait::for_process "$(pgrep wineserver 2>/dev/null || echo "")" 5 0.2 2>/dev/null || true
+                fi
+                if [ -d "$SCR_PATH/prefix" ]; then
+                    export WINEPREFIX="$SCR_PATH/prefix"
+                    wineserver -k 2>/dev/null || true
+                    pkill -f "wine.*Photoshop" 2>/dev/null || true
+                    unset WINEPREFIX
+                fi
+                sleep 2
+                
+                output::success "Wine-Prozesse beendet"
+                echo ""
+                
+                # Install .NET Framework
+                install_dotnet_framework
+            else
+                log_warning ".NET Framework Installation übersprungen (vom Benutzer)"
+                if [ "$LANG_CODE" = "de" ]; then
+                    output::info ".NET Framework Installation übersprungen - kann später installiert werden:"
+                    echo "  WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
+                else
+                    output::info ".NET Framework installation skipped - can be installed later:"
+                    echo "  WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
+                fi
+            fi
+        else
+            echo ""
+            output::warning "ℹ .NET Framework 4.8 Installation (RECOMMENDED)"
+            echo "  .NET Framework is recommended for better compatibility."
+            echo "  Installation takes 30-60 minutes (sometimes longer) - this is normal."
+            echo "  Installer: ~70-120MB, but installs several GB."
+            echo ""
+            read -p "$(echo -e "${C_YELLOW}Install .NET Framework now? [Y/n]:${C_RESET} ") " dotnet_install
+            if [[ ! "$dotnet_install" =~ ^[Nn]$ ]]; then
+                echo ""
+                output::step "Terminating Wine processes for .NET Framework installation..."
+                
+                # CRITICAL: Kill all Wine processes before .NET Framework installation
+                pkill -f "Photoshop.exe" 2>/dev/null || true
+                if command -v wineserver >/dev/null 2>&1; then
+                    wineserver -k 2>/dev/null || true
+                    wait::for_process "$(pgrep wineserver 2>/dev/null || echo "")" 5 0.2 2>/dev/null || true
+                fi
+                if [ -d "$SCR_PATH/prefix" ]; then
+                    export WINEPREFIX="$SCR_PATH/prefix"
+                    wineserver -k 2>/dev/null || true
+                    pkill -f "wine.*Photoshop" 2>/dev/null || true
+                    unset WINEPREFIX
+                fi
+                sleep 2
+                
+                output::success "Wine processes terminated"
+                echo ""
+                
+                # Install .NET Framework
+                install_dotnet_framework
+            else
+                log_warning ".NET Framework installation skipped (by user)"
+                output::info ".NET Framework installation skipped - can be installed later:"
+                echo "  WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
+            fi
+        fi
+        echo ""
+    fi
     
     # Ask user if they want to start Photoshop now
     output::section "$(i18n::get "start_photoshop_question")"
