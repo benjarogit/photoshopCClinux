@@ -2547,30 +2547,32 @@ install_wine_components() {
     
     # OPTIMIZATION: For newer versions (2021+) additional components
     # CRITICAL: Protect PS_VERSION with ${PS_VERSION:-}
-    # dotnet48 wird NUR für neuere Photoshop-Versionen (2021, 2022) benötigt, NICHT für CC 2019
+    # dotnet48 ist OPTIONAL für neuere Photoshop-Versionen (2021, 2022)
+    # Nur installieren wenn der Benutzer es möchte - Installation dauert sehr lange (30-60+ Minuten)
     if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
         output::step "$(i18n::get "installing_additional_components")"
         
-        # dotnet48 wird für neuere Photoshop-Versionen benötigt
+        # dotnet48 ist optional - nur bei Problemen mit Photoshop benötigt
         # #region agent log
         debug_log "PhotoshopSetup.sh:2176" "Before dotnet48 installation" "{\"PS_VERSION\":\"${PS_VERSION:-unknown}\",\"WINEPREFIX\":\"${WINEPREFIX:-}\"}" "H3"
         # #endregion
         
         if [ "$LANG_CODE" = "de" ]; then
-            output::warning ".NET Framework 4.8 Installation (erforderlich, kann 30-60 Minuten dauern)"
+            output::warning ".NET Framework 4.8 Installation (OPTIONAL, kann 30-60 Minuten dauern)"
             echo ""
-            echo "  WICHTIG: .NET Framework ist für Photoshop erforderlich!"
+            echo "  HINWEIS: .NET Framework ist OPTIONAL und wird nur bei bestimmten Problemen benötigt."
             echo "  Die Installation dauert unter Wine 30-60 Minuten (manchmal länger) - das ist normal."
             echo "  Der Installer ist ~70-120MB, installiert aber mehrere GB."
-            echo "  Wine-Emulation macht die Installation sehr langsam - bitte einfach laufen lassen."
+            echo "  Wine-Emulation macht die Installation sehr langsam."
             echo ""
-            echo "  Falls du abbrechen möchtest, kannst du später manuell installieren:"
+            echo "  EMPFEHLUNG: Überspringe die Installation zunächst. Falls Photoshop Probleme macht,"
+            echo "  kannst du es später manuell installieren:"
             echo "  WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
             echo ""
-            read -p "$(echo -e "${C_YELLOW}.NET Framework jetzt installieren? [J/n]:${C_RESET} ") " dotnet_continue
-            if [[ "$dotnet_continue" =~ ^[Nn]$ ]]; then
+            read -p "$(echo -e "${C_YELLOW}.NET Framework jetzt installieren? [j/N]:${C_RESET} ") " dotnet_continue
+            if [[ ! "$dotnet_continue" =~ ^[JjYy]$ ]]; then
                 log_warning ".NET Framework Installation übersprungen (vom Benutzer abgebrochen)"
-                output::warning ".NET Framework Installation übersprungen - kann später manuell installiert werden"
+                output::success ".NET Framework Installation übersprungen - kann später manuell installiert werden falls nötig"
                 return 0  # Skip dotnet installation
             fi
             echo ""
@@ -2580,20 +2582,21 @@ install_wine_components() {
                 echo -ne "${C_YELLOW}→${C_RESET} ${C_CYAN}Installing .NET Framework 4.8 (can take 30-60 minutes, please wait)...${C_RESET} "
             fi
         else
-            output::warning ".NET Framework 4.8 installation (required, can take 30-60 minutes)"
+            output::warning ".NET Framework 4.8 installation (OPTIONAL, can take 30-60 minutes)"
             echo ""
-            echo "  IMPORTANT: .NET Framework is required for Photoshop!"
+            echo "  NOTE: .NET Framework is OPTIONAL and only needed for certain issues."
             echo "  Installation takes 30-60 minutes under Wine (sometimes longer) - this is normal."
             echo "  Installer is ~70-120MB, but installs several GB."
-            echo "  Wine emulation makes installation very slow - please just let it run."
+            echo "  Wine emulation makes installation very slow."
             echo ""
-            echo "  If you want to cancel, you can install manually later:"
+            echo "  RECOMMENDATION: Skip installation for now. If Photoshop has issues,"
+            echo "  you can install it manually later:"
             echo "  WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
             echo ""
-            read -p "$(echo -e "${C_YELLOW}Install .NET Framework now? [Y/n]:${C_RESET} ") " dotnet_continue
-            if [[ "$dotnet_continue" =~ ^[Nn]$ ]]; then
+            read -p "$(echo -e "${C_YELLOW}Install .NET Framework now? [y/N]:${C_RESET} ") " dotnet_continue
+            if [[ ! "$dotnet_continue" =~ ^[YyJj]$ ]]; then
                 log_warning ".NET Framework installation skipped (user cancelled)"
-                output::warning ".NET Framework installation skipped - can be installed manually later"
+                output::success ".NET Framework installation skipped - can be installed manually later if needed"
                 return 0  # Skip dotnet installation
             fi
             echo ""
