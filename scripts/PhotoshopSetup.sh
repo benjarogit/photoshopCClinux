@@ -2549,8 +2549,7 @@ install_wine_components() {
     # CRITICAL: Protect PS_VERSION with ${PS_VERSION:-}
     # dotnet48 wird NUR für neuere Photoshop-Versionen (2021, 2022) benötigt, NICHT für CC 2019
     if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
-        local component_msg=$(i18n::get "installing_additional_components")
-        output::step "$(printf "$component_msg" "${PS_VERSION:-unknown}")"
+        output::step "$(i18n::get "installing_additional_components")"
         
         # dotnet48 wird für neuere Photoshop-Versionen benötigt
         # #region agent log
@@ -2558,39 +2557,37 @@ install_wine_components() {
         # #endregion
         
         if [ "$LANG_CODE" = "de" ]; then
-            output::warning "⚠ .NET Framework 4.8 Installation kann 15-30 Minuten dauern!"
+            output::warning ".NET Framework 4.8 Installation (optional, kann sehr lange dauern)"
             echo ""
-            output::substep "Dies ist normal - .NET Framework ist sehr groß (~200MB)"
-            output::substep "Du kannst die Installation abbrechen (STRG+C) und später manuell installieren:"
-            echo "     WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
+            echo "  Hinweis: .NET Framework ist optional und kann später manuell installiert werden."
+            echo "  Befehl: WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
             echo ""
-            read -p "$(echo -e "${C_YELLOW}Fortfahren mit .NET Framework Installation? [J/n]:${C_RESET} ") " dotnet_continue
-            if [[ "$dotnet_continue" =~ ^[Nn]$ ]]; then
+            read -p "$(echo -e "${C_YELLOW}.NET Framework jetzt installieren? [j/N]:${C_RESET} ") " dotnet_continue
+            if [[ ! "$dotnet_continue" =~ ^[JjYy]$ ]]; then
                 log_warning ".NET Framework Installation übersprungen (vom Benutzer abgebrochen)"
-                if [ "$LANG_CODE" = "de" ]; then
-                    output::warning ".NET Framework Installation übersprungen - kann später manuell installiert werden"
-                else
-                    output::warning ".NET Framework installation skipped - can be installed manually later"
-                fi
+                output::warning ".NET Framework Installation übersprungen - kann später manuell installiert werden"
                 return 0  # Skip dotnet installation
             fi
             echo ""
-            output::spinner_line "$(i18n::get "installing_dotnet")"
+            if [ "$LANG_CODE" = "de" ]; then
+                output::spinner_line "Installiere .NET Framework 4.8 (kann 15-30 Minuten dauern)..."
+            else
+                output::spinner_line "Installing .NET Framework 4.8 (can take 15-30 minutes)..."
+            fi
         else
-            output::warning "⚠ .NET Framework 4.8 installation can take 15-30 minutes!"
+            output::warning ".NET Framework 4.8 installation (optional, can take very long)"
             echo ""
-            output::substep "This is normal - .NET Framework is very large (~200MB)"
-            output::substep "You can cancel (CTRL+C) and install manually later:"
-            echo "     WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
+            echo "  Note: .NET Framework is optional and can be installed manually later."
+            echo "  Command: WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
             echo ""
-            read -p "$(echo -e "${C_YELLOW}Continue with .NET Framework installation? [Y/n]:${C_RESET} ") " dotnet_continue
-            if [[ "$dotnet_continue" =~ ^[Nn]$ ]]; then
+            read -p "$(echo -e "${C_YELLOW}Install .NET Framework now? [y/N]:${C_RESET} ") " dotnet_continue
+            if [[ ! "$dotnet_continue" =~ ^[JjYy]$ ]]; then
                 log_warning ".NET Framework installation skipped (user cancelled)"
                 output::warning ".NET Framework installation skipped - can be installed manually later"
                 return 0  # Skip dotnet installation
             fi
             echo ""
-            output::spinner_line "Installing .NET Framework 4.8 (takes 15-30 minutes)..."
+            output::spinner_line "Installing .NET Framework 4.8 (can take 15-30 minutes)..."
         fi
         
         # Filter out Wine warnings - output to log only
@@ -2602,37 +2599,53 @@ install_wine_components() {
         # #endregion
         
         # Use spinner for long operation with timeout (max 30 minutes)
-        # Show periodic feedback that it's still running (every 2 minutes)
+        # Show spinner while process is running
         local timeout_seconds=1800  # 30 minutes
         local elapsed=0
-        local check_interval=120  # Check every 2 minutes
+        local check_interval=1  # Check every second for spinner
+        local last_progress_update=0
         
-        while kill -0 $dotnet_pid 2>/dev/null && [ $elapsed -lt $timeout_seconds ]; do
-            sleep $check_interval
-            elapsed=$((elapsed + check_interval))
-            
-            # Show progress every 2 minutes
-            local minutes=$((elapsed / 60))
-            if [ "$LANG_CODE" = "de" ]; then
-                echo -e "\r${C_YELLOW}  ⏳ Läuft seit ${minutes} Minuten... (kann bis zu 30 Minuten dauern)${C_RESET}    "
-            else
-                echo -e "\r${C_YELLOW}  ⏳ Running for ${minutes} minutes... (can take up to 30 minutes)${C_RESET}    "
-            fi
-        done
+        # Start spinner in background
+        (
+            while kill -0 $dotnet_pid 2>/dev/null && [ $elapsed -lt $timeout_seconds ]; do
+                local spinstr='|/-\'
+                local temp=${spinstr#?}
+                printf "\r  %s " "${spinstr}"
+                spinstr=${temp}${spinstr%"$temp"}
+                sleep 0.2
+                elapsed=$((elapsed + 1))
+                
+                # Show progress every 2 minutes (120 seconds)
+                if [ $((elapsed % 120)) -eq 0 ] && [ $elapsed -gt 0 ]; then
+                    local minutes=$((elapsed / 60))
+                    if [ "$LANG_CODE" = "de" ]; then
+                        printf "\r  ⏳ Läuft seit %d Minuten... (kann bis zu 30 Minuten dauern)    " "$minutes"
+                    else
+                        printf "\r  ⏳ Running for %d minutes... (can take up to 30 minutes)    " "$minutes"
+                    fi
+                    sleep 2
+                fi
+            done
+        ) &
+        local spinner_pid=$!
         
-        # Check if process is still running
-        if kill -0 $dotnet_pid 2>/dev/null; then
-            # Timeout reached - kill process
+        # Wait for dotnet process
+        wait $dotnet_pid
+        local dotnet_exit=$?
+        
+        # Stop spinner
+        kill $spinner_pid 2>/dev/null
+        wait $spinner_pid 2>/dev/null
+        
+        # Check if timeout was reached
+        if [ $elapsed -ge $timeout_seconds ]; then
             log_warning ".NET Framework installation timed out after 30 minutes"
             kill $dotnet_pid 2>/dev/null
             wait $dotnet_pid 2>/dev/null
-            local dotnet_exit=124  # Timeout exit code
-        else
-            # Process finished normally
-            wait $dotnet_pid
-            local dotnet_exit=$?
+            dotnet_exit=124  # Timeout exit code
         fi
-        echo ""
+        
+        echo ""  # New line after spinner
         
         # #region agent log
         debug_log "PhotoshopSetup.sh:2181" "dotnet48 installation completed" "{\"dotnet_exit\":${dotnet_exit},\"dotnet_pid\":${dotnet_pid}}" "H3"
