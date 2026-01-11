@@ -44,28 +44,40 @@ setup_uninstaller_logging() {
     # Create logs directory if it doesn't exist
     mkdir -p "$log_dir" 2>/dev/null || true
     
-    # Generate timestamp for log filename
+    # Generate timestamp for log filename (ISO format for better sorting)
+    local timestamp_iso=$(date +%Y-%m-%d_%H-%M-%S)
     local timestamp=$(date '+%d.%m.%y %H:%M Uhr' 2>/dev/null || date '+%d.%m.%y %H:%M Uhr')
-    local log_file="$log_dir/Uninstall: ${timestamp}.log"
-    local error_log_file="$log_dir/Uninstall: ${timestamp}_errors.log"
+    local log_file="$log_dir/Uninstall_${timestamp_iso}.log"
+    local warning_log_file="$log_dir/Uninstall_${timestamp_iso}_warnings.log"
+    local error_log_file="$log_dir/Uninstall_${timestamp_iso}_errors.log"
     
     # Export log file paths for use in other functions
     export LOG_FILE="$log_file"
+    export WARNING_LOG="$warning_log_file"
     export ERROR_LOG="$error_log_file"
     export PROJECT_ROOT="$project_root"
     export LOG_DIR="$log_dir"
     
-    # Initialize log files
-    echo "=== Photoshop Uninstaller Log ===" > "$log_file"
-    echo "Started: $(date)" >> "$log_file"
+    # Initialize log files with structured headers
+    echo "═══════════════════════════════════════════════════════════════" > "$log_file"
+    echo "            Photoshop Uninstaller Log" >> "$log_file"
+    echo "═══════════════════════════════════════════════════════════════" >> "$log_file"
+    echo "Started: $(date '+%Y-%m-%d %H:%M:%S')" >> "$log_file"
     echo "Log file: $log_file" >> "$log_file"
+    echo "Warning log: $warning_log_file" >> "$log_file"
     echo "Error log: $error_log_file" >> "$log_file"
-    echo "================================" >> "$log_file"
     echo "" >> "$log_file"
     
-    echo "=== Photoshop Uninstaller Error Log ===" > "$error_log_file"
-    echo "Started: $(date)" >> "$error_log_file"
-    echo "================================" >> "$error_log_file"
+    echo "═══════════════════════════════════════════════════════════════" > "$warning_log_file"
+    echo "            Uninstaller Warnings Log" >> "$warning_log_file"
+    echo "═══════════════════════════════════════════════════════════════" >> "$warning_log_file"
+    echo "Started: $(date '+%Y-%m-%d %H:%M:%S')" >> "$warning_log_file"
+    echo "" >> "$warning_log_file"
+    
+    echo "═══════════════════════════════════════════════════════════════" > "$error_log_file"
+    echo "            Uninstaller Errors Log" >> "$error_log_file"
+    echo "═══════════════════════════════════════════════════════════════" >> "$error_log_file"
+    echo "Started: $(date '+%Y-%m-%d %H:%M:%S')" >> "$error_log_file"
     echo "" >> "$error_log_file"
     
     # Log initial information
@@ -81,27 +93,62 @@ setup_uninstaller_logging() {
 # Enhanced logging function for uninstaller (similar to log_debug in PhotoshopSetup.sh)
 log_debug() {
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date)
+    
+    # Always log to file
     if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
         echo "[$timestamp] DEBUG: $@" >> "${LOG_FILE}"
+    fi
+    
+    # Only show on console in verbose mode (and not in quiet mode)
+    if [ "${VERBOSE:-0}" = "1" ] && [ "${QUIET:-0}" != "1" ]; then
+        # Use C_GRAY if available, otherwise plain text
+        if [ -n "${C_GRAY:-}" ]; then
+            echo -e "${C_GRAY}[DEBUG]${C_RESET} $@" >&2
+        else
+            echo "[DEBUG] $@" >&2
+        fi
     fi
 }
 
 # Log error messages
 log_error() {
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date)
+    local category="${1:-UNINSTALL}"
+    shift
+    local message="$*"
+    
+    # Check if first argument is a category
+    if [[ ! "$category" =~ ^[A-Z_]+$ ]] || [ "$category" = "UNINSTALL" ]; then
+        message="$category $*"
+        category="UNINSTALL"
+    fi
+    
     if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
-        echo "[$timestamp] ERROR: $@" >> "${LOG_FILE}"
+        echo "[$timestamp] [ERROR] [$category] $message" >> "${LOG_FILE}"
     fi
     if [ -n "${ERROR_LOG:-}" ] && [ -f "${ERROR_LOG:-}" ]; then
-        echo "[$timestamp] ERROR: $@" >> "${ERROR_LOG}"
+        echo "[$timestamp] [$category] $message" >> "${ERROR_LOG}"
     fi
 }
 
 # Log warning messages
 log_warning() {
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date)
+    local category="${1:-UNINSTALL}"
+    shift
+    local message="$*"
+    
+    # Check if first argument is a category
+    if [[ ! "$category" =~ ^[A-Z_]+$ ]] || [ "$category" = "UNINSTALL" ]; then
+        message="$category $*"
+        category="UNINSTALL"
+    fi
+    
     if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
-        echo "[$timestamp] WARNING: $@" >> "${LOG_FILE}"
+        echo "[$timestamp] [WARNING] [$category] $message" >> "${LOG_FILE}"
+    fi
+    if [ -n "${WARNING_LOG:-}" ] && [ -f "${WARNING_LOG:-}" ]; then
+        echo "[$timestamp] [$category] $message" >> "${WARNING_LOG}"
     fi
 }
 
@@ -199,7 +246,15 @@ main() {
     log_debug "ENTRY_PATH: $ENTRY_PATH"
     
     local start_msg="$(i18n::get "uninstaller_started")"
-    notify-send "Photoshop" "$start_msg" -i "photoshop" 2>/dev/null || true
+    if command -v notify-send >/dev/null 2>&1; then
+        if notify-send "Photoshop" "$start_msg" -i "photoshop" 2>/dev/null; then
+            log_debug "Notification sent successfully"
+        else
+            log_debug "Notification failed (non-critical, likely no DBus session)"
+        fi
+    else
+        log_debug "notify-send not available - skipping notification"
+    fi
     log_info "$start_msg"
 
     # CRITICAL: Load installation paths and Wine version info BEFORE using them
@@ -374,7 +429,13 @@ main() {
         if [ -f "$entry" ]; then
             if rm "$entry" 2>/dev/null; then
                 found_any=true
-                setup_log "$(i18n::get "removed_menu" "$entry")" 2>/dev/null || true
+                local removed_msg
+                if [ "$LANG_CODE" = "de" ]; then
+                    removed_msg=$(printf "Entfernt (Menü): %s" "$entry")
+                else
+                    removed_msg=$(printf "Removed (menu): %s" "$entry")
+                fi
+                setup_log "$removed_msg" 2>/dev/null || true
             fi
         fi
     done
@@ -384,7 +445,13 @@ main() {
         if [ -f "$icon" ]; then
             if rm "$icon" 2>/dev/null; then
                 found_any=true
-                setup_log "$(i18n::get "removed_desktop" "$icon")" 2>/dev/null || true
+                local removed_msg
+                if [ "$LANG_CODE" = "de" ]; then
+                    removed_msg=$(printf "Entfernt (Desktop): %s" "$icon")
+                else
+                    removed_msg=$(printf "Removed (desktop): %s" "$icon")
+                fi
+                setup_log "$removed_msg" 2>/dev/null || true
             fi
         fi
     done
@@ -446,7 +513,13 @@ main() {
 
     #delete cache directory (automatic - no confirmation needed)
     if [ -d "$CACHE_PATH" ];then
-        log_info "$(i18n::get "removing_cache_dir" "$CACHE_PATH")"
+        local cache_msg
+        if [ "$LANG_CODE" = "de" ]; then
+            cache_msg=$(printf "Entferne Cache-Verzeichnis: %s" "$CACHE_PATH")
+        else
+            cache_msg=$(printf "Removing cache directory: %s" "$CACHE_PATH")
+        fi
+        log_info "$cache_msg"
         # CRITICAL: Use safe_remove for security
         if type filesystem::safe_remove >/dev/null 2>&1; then
             filesystem::safe_remove "$CACHE_PATH" "uninstaller" || log_warning "Konnte Cache-Verzeichnis nicht entfernen"

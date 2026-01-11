@@ -223,10 +223,22 @@ echo ""
 
 # Check 8: Previous Installation
 echo "8. Überprüfe auf vorherige Installationen..."
-if [ -d "$HOME/.photoshopCCV19" ]; then
-    check_warning "Vorherige Installation gefunden in ~/.photoshopCCV19"
+# Check both old and new paths for compatibility
+OLD_PATH="$HOME/.photoshopCCV19"
+NEW_PATH="$HOME/.photoshop"
+FOUND_INSTALLATION=""
+
+if [ -d "$NEW_PATH" ]; then
+    FOUND_INSTALLATION="$NEW_PATH"
+    check_warning "Vorherige Installation gefunden in ~/.photoshop"
+    echo "   ${YELLOW}Die Installation wird das Verzeichnis überschreiben!${NC}"
+    echo "   Backup erstellen? Befehl: mv ~/.photoshop ~/.photoshop.backup"
+elif [ -d "$OLD_PATH" ]; then
+    FOUND_INSTALLATION="$OLD_PATH"
+    check_warning "Vorherige Installation gefunden in ~/.photoshopCCV19 (alte Version)"
     echo "   ${YELLOW}Die Installation wird das Verzeichnis überschreiben!${NC}"
     echo "   Backup erstellen? Befehl: mv ~/.photoshopCCV19 ~/.photoshopCCV19.backup"
+    echo "   ${BLUE}Hinweis: Neue Installationen verwenden ~/.photoshop${NC}"
 else
     check_ok "Keine vorherige Installation gefunden"
 fi
@@ -309,8 +321,8 @@ if [ $CHECKS_FAILED -eq 0 ]; then
             echo ""
         fi
         
-        if [ -d "$HOME/.photoshopCCV19" ]; then
-            echo "• Vorherige Installation: Das alte Verzeichnis wird"
+        if [ -n "$FOUND_INSTALLATION" ]; then
+            echo "• Vorherige Installation: Das Verzeichnis $FOUND_INSTALLATION wird"
             echo "  überschrieben. Erstelle ein Backup falls nötig."
             echo ""
         fi

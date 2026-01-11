@@ -61,6 +61,29 @@ debug_log() {
     echo "{\"id\":\"log_${timestamp}_$$\",\"timestamp\":${timestamp},\"location\":\"${location}\",\"message\":\"${message}\",\"data\":${data},\"sessionId\":\"${session_id}\",\"runId\":\"${run_id}\",\"hypothesisId\":\"${hypothesis_id}\"}" >> "$DEBUG_LOG" 2>/dev/null || true
 }
 
+# Fallback log_debug function (if not defined by PhotoshopSetup.sh)
+if ! command -v log_debug >/dev/null 2>&1; then
+    log_debug() {
+        local timestamp=$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date)
+        local message="$*"
+        
+        # Always log to file if LOG_FILE is set
+        if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
+            echo "[$timestamp] DEBUG: $message" >> "${LOG_FILE}" 2>/dev/null || true
+        fi
+        
+        # Only show on console in verbose mode (and not in quiet mode)
+        if [ "${VERBOSE:-0}" = "1" ] && [ "${QUIET:-0}" != "1" ]; then
+            # Use C_GRAY if available, otherwise plain text
+            if [ -n "${C_GRAY:-}" ]; then
+                echo -e "${C_GRAY}[DEBUG]${C_RESET} $message" >&2
+            else
+                echo "[DEBUG] $message" >&2
+            fi
+        fi
+    }
+fi
+
 # ANSI Color codes (same as setup.sh and PhotoshopSetup.sh)
 if [ -t 1 ] && [ "$TERM" != "dumb" ]; then
     C_RESET="\033[0m"
@@ -260,8 +283,14 @@ function error() {
     # Strip ANSI codes for logging
     local plain_message=$(echo "$message" | sed 's/\x1b\[[0-9;]*m//g')
     
-    # Display with red color
-    echo -e "${C_RED}✗ ERROR:${C_RESET} ${C_RED}$message${C_RESET}"
+    # Display error using output::error for consistency
+    # output::error is sourced from output.sh in setup.sh/main script
+    if type output::error >/dev/null 2>&1; then
+        output::error "$message"
+    else
+        # Fallback if output::error is not available (should not happen in normal flow)
+        echo -e "${C_RED}✗ ERROR:${C_RESET} ${C_RED}$message${C_RESET}" >&2
+    fi
     
     # Log to main log if available (plain text)
     if [ -n "$main_log" ] && [ -f "$main_log" ]; then
@@ -353,7 +382,7 @@ function launcher() {
         fi
         # Last fallback: Try to find scripts/ directory relative to SCR_PATH
         if [ -z "${SCRIPT_DIR:-}" ] && [ -n "${SCR_PATH:-}" ]; then
-            # SCR_PATH is usually ~/.photoshopCCV19, project is one directory up
+            # SCR_PATH is usually ~/.photoshop, project is one directory up
             local possible_script_dir="$(dirname "$(dirname "$SCR_PATH")")/scripts" 2>/dev/null || true
             if [ -d "$possible_script_dir" ] && [ -f "$possible_script_dir/launcher.sh" ]; then
                 SCRIPT_DIR="$possible_script_dir"
@@ -374,8 +403,7 @@ function launcher() {
     mkdir -p "$launcher_dest" || error "can't create launcher directory"
 
     if [ -f "$launcher_path" ]; then
-        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}launcher.sh${C_RESET} detected..."
-        
+        # Silent - don't show "detected" message to user (irrelevant info)
         cp "$launcher_path" "$launcher_dest" || error "can't copy launcher"
         
         # Copy sharedFuncs.sh to launcher directory so launcher.sh can source it
@@ -397,10 +425,15 @@ function launcher() {
     local desktop_entry_dest="$HOME/.local/share/applications/photoshop.desktop"
     
     if [ -f "$desktop_entry" ];then
-        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}desktop entry${C_RESET} detected..."
-       
-        #delete desktop entry if exists
-        if [ -f "$desktop_entry_dest" ];then
+        # Silent - don't show "detected" message to user (irrelevant info)
+        # Backup existing desktop entry before overwriting
+        if [ -f "$desktop_entry_dest" ]; then
+            local backup_file="${desktop_entry_dest}.bak.$(date +%Y%m%d_%H%M%S)"
+            cp "$desktop_entry_dest" "$backup_file" 2>/dev/null || {
+                if type log_warning >/dev/null 2>&1; then
+                    log_warning "Could not backup existing desktop entry (non-critical)"
+                fi
+            }
             show_message "${C_YELLOW}→${C_RESET} ${C_GRAY}desktop entry${C_RESET} exist deleted..."
             rm "$desktop_entry_dest"
         fi
@@ -491,7 +524,7 @@ function launcher() {
                 fi
                 
                 # Update Icon if we have one
-                local launch_icon="$launcher_dest/AdobePhotoshop-icon.png"
+                local launch_icon="$SCR_PATH/launcher/AdobePhotoshop-icon.png"
                 if [ -f "$launch_icon" ] && grep -q "^Icon=" "$entry" 2>/dev/null; then
                     sed -i "s|^Icon=.*|Icon=${launch_icon}|g" "$entry" 2>/dev/null || true
                 fi
@@ -591,7 +624,7 @@ function launcher() {
                     
                     # Correct the entry to use our launcher
                     local launcher_script_path="$SCR_PATH/launcher/launcher.sh"
-    local launch_icon="$launcher_dest/AdobePhotoshop-icon.png"
+                    local launch_icon="$SCR_PATH/launcher/AdobePhotoshop-icon.png"
 
                     # Backup and correct
                     cp "$entry" "${entry}.bak" 2>/dev/null || true
@@ -727,7 +760,10 @@ function launcher() {
         
         if [ "$generate_png" = true ]; then
             # Generate PNG icons in various sizes (needed for KDE and some desktop environments)
-            local icon_sizes=(16 22 24 32 48 64 128 256 512)
+            # CRITICAL: Limit to essential sizes to prevent long delays - only generate most important sizes
+            # Full set would be: 16 22 24 32 48 64 128 256 512, but that takes too long
+            # Most desktop environments work fine with just: 48 64 128 256
+            local icon_sizes=(48 64 128 256)
             
             for size in "${icon_sizes[@]}"; do
             local icon_dir="$HOME/.local/share/icons/hicolor/${size}x${size}/apps"
@@ -751,7 +787,8 @@ function launcher() {
                 rm -f "$icon_dir/${icon_name}.png" 2>/dev/null || true
                 
                 # Try resize with extent - suppress warnings but keep errors
-                $magick_cmd "$entry_icon" -define png:ignore-crc -resize ${size}x${size}! -background transparent -gravity center -extent ${size}x${size} -quality 95 "$icon_dir/${icon_name}.png" 2>&1 | grep -v "warning\|deprecated\|WARNING" || true
+                # CRITICAL: Use timeout to prevent hanging if ImageMagick has issues
+                timeout 5 $magick_cmd "$entry_icon" -define png:ignore-crc -resize ${size}x${size}! -background transparent -gravity center -extent ${size}x${size} -quality 95 "$icon_dir/${icon_name}.png" 2>&1 | grep -v "warning\|deprecated\|WARNING" || true
                 
                 # Verify icon was resized correctly - CRITICAL: Check actual dimensions
                 local actual_size=$(identify "$icon_dir/${icon_name}.png" 2>/dev/null | awk '{print $3}' | cut -dx -f1,2 || echo "")
@@ -767,7 +804,7 @@ function launcher() {
                     # Icon was not resized correctly, try again with different method
                     log_debug "Icon resize failed for ${size}x${size} (got '$actual_size'), retrying with -thumbnail..."
                     rm -f "$icon_dir/${icon_name}.png" 2>/dev/null || true
-                    $magick_cmd "$entry_icon" -define png:ignore-crc -thumbnail ${size}x${size}! -background transparent -gravity center -extent ${size}x${size} -quality 95 "$icon_dir/${icon_name}.png" 2>&1 | grep -v "warning\|deprecated\|WARNING" || true
+                    timeout 5 $magick_cmd "$entry_icon" -define png:ignore-crc -thumbnail ${size}x${size}! -background transparent -gravity center -extent ${size}x${size} -quality 95 "$icon_dir/${icon_name}.png" 2>&1 | grep -v "warning\|deprecated\|WARNING" || true
                     
                     # Verify again
                     actual_size=""
@@ -782,7 +819,7 @@ function launcher() {
                     if [ -z "$actual_size" ] || [ "$actual_size" != "${size}x${size}" ]; then
                         log_debug "Icon resize still failed for ${size}x${size} (got '$actual_size'), trying -scale..."
                         rm -f "$icon_dir/${icon_name}.png" 2>/dev/null || true
-                        $magick_cmd "$entry_icon" -define png:ignore-crc -scale ${size}x${size}! -background transparent -gravity center -extent ${size}x${size} -quality 95 "$icon_dir/${icon_name}.png" 2>&1 | grep -v "warning\|deprecated\|WARNING" || true
+                        timeout 5 $magick_cmd "$entry_icon" -define png:ignore-crc -scale ${size}x${size}! -background transparent -gravity center -extent ${size}x${size} -quality 95 "$icon_dir/${icon_name}.png" 2>&1 | grep -v "warning\|deprecated\|WARNING" || true
                         
                         # Final verification
                         actual_size=""
@@ -908,7 +945,6 @@ EOF
             rm -f "$hicolor_dir/icon-theme.cache" 2>/dev/null || true
             
             # #region agent log
-            echo "{\"id\":\"log_$(date +%s)_icon_cache_start\",\"timestamp\":$(date +%s%3N),\"location\":\"sharedFuncs.sh:794\",\"message\":\"Icon cache update started\",\"data\":{\"hicolor_dir\":\"$hicolor_dir\"},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\"}" >> /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/.cursor/debug.log 2>/dev/null || true
             # #endregion
             
             # Check icon files before cache update
@@ -918,14 +954,12 @@ EOF
                     local icon_size=$(stat -c%s "$hicolor_dir/${size}x${size}/apps/${icon_name}.png" 2>/dev/null || echo "0")
                     local icon_dimensions=$(file "$hicolor_dir/${size}x${size}/apps/${icon_name}.png" 2>/dev/null | grep -o "[0-9]* x [0-9]*" || echo "unknown")
                     # #region agent log
-                    echo "{\"id\":\"log_$(date +%s)_icon_check_${size}\",\"timestamp\":$(date +%s%3N),\"location\":\"sharedFuncs.sh:805\",\"message\":\"Icon file check\",\"data\":{\"size\":\"${size}x${size}\",\"exists\":true,\"file_size\":$icon_size,\"dimensions\":\"$icon_dimensions\"},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H4\"}" >> /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/.cursor/debug.log 2>/dev/null || true
                     # #endregion
                     icon_count=$((icon_count + 1))
                 fi
             done
             
             # #region agent log
-            echo "{\"id\":\"log_$(date +%s)_icon_count\",\"timestamp\":$(date +%s%3N),\"location\":\"sharedFuncs.sh:812\",\"message\":\"Icon count before cache update\",\"data\":{\"icon_count\":$icon_count},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H4\"}" >> /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/.cursor/debug.log 2>/dev/null || true
             # #endregion
             
             # CRITICAL: Fix icon cache issues - validate icon files first
@@ -953,19 +987,18 @@ EOF
             # Update icon cache (capture errors for debugging)
             # CRITICAL: Even if cache is marked as "invalid", it may still work
             # Some desktop environments can use icons without a valid cache
+            # CRITICAL: Use timeout to prevent hanging
             local cache_output
-            cache_output=$(gtk-update-icon-cache -f -t "$hicolor_dir" 2>&1)
+            cache_output=$(timeout 15 gtk-update-icon-cache -f -t "$hicolor_dir" 2>&1)
             local cache_exit=$?
             
             # #region agent log
-            echo "{\"id\":\"log_$(date +%s)_icon_cache_result\",\"timestamp\":$(date +%s%3N),\"location\":\"sharedFuncs.sh:819\",\"message\":\"Icon cache update result\",\"data\":{\"cache_exit\":$cache_exit,\"cache_output\":\"$cache_output\",\"invalid_icons\":$invalid_icons},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\"}" >> /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/.cursor/debug.log 2>/dev/null || true
             # #endregion
             
             # Check if cache was created (even if marked as invalid)
             if [ -f "$hicolor_dir/icon-theme.cache" ]; then
                 local cache_size=$(stat -c%s "$hicolor_dir/icon-theme.cache" 2>/dev/null || echo "0")
                 # #region agent log
-                echo "{\"id\":\"log_$(date +%s)_icon_cache_created\",\"timestamp\":$(date +%s%3N),\"location\":\"sharedFuncs.sh:833\",\"message\":\"Icon cache file created\",\"data\":{\"cache_size\":$cache_size,\"cache_exit\":$cache_exit,\"cache_output\":\"$cache_output\"},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\"}" >> /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/.cursor/debug.log 2>/dev/null || true
                 # #endregion
                 if [ $cache_exit -eq 0 ]; then
                     log_debug "Icon cache updated successfully: $hicolor_dir"
@@ -973,16 +1006,15 @@ EOF
                     # Cache was created but marked as invalid - try to fix by removing and regenerating
                     log_debug "Icon cache marked as invalid, attempting to fix: $cache_output"
                     rm -f "$hicolor_dir/icon-theme.cache" 2>/dev/null || true
-                    # Try again without -t flag (sometimes helps)
-                    gtk-update-icon-cache -f "$hicolor_dir" 2>&1 | grep -v "invalid" || true
+                    # Try again without -t flag (sometimes helps) - with timeout
+                    timeout 15 gtk-update-icon-cache -f "$hicolor_dir" 2>&1 | grep -v "invalid" || true
                 fi
             else
                 # #region agent log
-                echo "{\"id\":\"log_$(date +%s)_icon_cache_failed\",\"timestamp\":$(date +%s%3N),\"location\":\"sharedFuncs.sh:838\",\"message\":\"Icon cache file not created\",\"data\":{\"cache_exit\":$cache_exit,\"cache_output\":\"$cache_output\"},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\"}" >> /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/.cursor/debug.log 2>/dev/null || true
                 # #endregion
                 log_debug "Warning: Icon cache file not created (icons will use icon name lookup): $cache_output"
-                # Try alternative method (without -t flag)
-                gtk-update-icon-cache -f "$hicolor_dir" 2>&1 | grep -v "invalid" || true
+                # Try alternative method (without -t flag) - with timeout
+                timeout 15 gtk-update-icon-cache -f "$hicolor_dir" 2>&1 | grep -v "invalid" || true
             fi
         fi
         # CRITICAL: Update icon cache and desktop database using system detection
@@ -994,10 +1026,11 @@ EOF
             # Fallback: Try both methods if system module not available
             local hicolor_dir="$HOME/.local/share/icons/hicolor"
             if command -v gtk-update-icon-cache >/dev/null 2>&1 && [ -d "$hicolor_dir" ]; then
-                gtk-update-icon-cache -f -t "$hicolor_dir" 2>/dev/null || true
+                timeout 15 gtk-update-icon-cache -f -t "$hicolor_dir" 2>/dev/null || true
             fi
             if command -v kbuildsycoca4 >/dev/null 2>&1; then
-                kbuildsycoca4 --noincremental 2>/dev/null || true
+                # Run with timeout to prevent hanging (KDE icon cache can hang)
+                timeout 10 kbuildsycoca4 --noincremental 2>/dev/null || true
             fi
         fi
         
@@ -1007,7 +1040,8 @@ EOF
             system::update_desktop_database
             log_debug "Desktop database updated (desktop: $(system::detect_desktop))"
         elif command -v update-desktop-database >/dev/null 2>&1; then
-            update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+            # Run with timeout to prevent hanging
+            timeout 10 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
             log_debug "Desktop database updated"
         fi
         
@@ -1094,7 +1128,7 @@ EOF
             system::update_icon_cache
             log_debug "Icon cache refreshed after desktop entry update (desktop: $(system::detect_desktop))"
         elif command -v gtk-update-icon-cache >/dev/null 2>&1 && [ -d "$hicolor_dir" ]; then
-            gtk-update-icon-cache -f -t "$hicolor_dir" 2>/dev/null || true
+            timeout 15 gtk-update-icon-cache -f -t "$hicolor_dir" 2>/dev/null || true
             log_debug "Icon cache refreshed after desktop entry update"
         fi
         
@@ -1104,7 +1138,7 @@ EOF
             system::update_desktop_database
             log_debug "Desktop database refreshed after icon update (desktop: $(system::detect_desktop))"
         elif command -v update-desktop-database >/dev/null 2>&1; then
-            update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+            timeout 10 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
             log_debug "Desktop database refreshed after icon update"
         fi
     else
@@ -1161,150 +1195,159 @@ EOF
   </mime-type>
 </mime-info>
 EOF
-        # Aktualisiere MIME-Datenbank
+        # Aktualisiere MIME-Datenbank - with timeouts to prevent hanging
         if command -v update-desktop-database &>/dev/null; then
-            update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+            timeout 10 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
         fi
         if command -v update-mime-database &>/dev/null; then
-            update-mime-database "$HOME/.local/share/mime" 2>/dev/null || true
+            timeout 10 update-mime-database "$HOME/.local/share/mime" 2>/dev/null || true
         fi
         show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}MIME-Type Registrierung${C_RESET} erstellt (PSD/PSB Dateien können mit Photoshop geöffnet werden)"
     fi
     
     #create photoshop command
-    show_message "${C_YELLOW}→${C_RESET} ${C_CYAN}create photoshop command...${C_RESET}"
-    # CRITICAL: Validation BEFORE sudo operation - prevent privilege escalation
-    # Use centralized security::validate_path function if available
-    if type security::validate_path >/dev/null 2>&1; then
-        if ! security::validate_path "$SCR_PATH"; then
-            error "SCR_PATH zeigt auf System-Verzeichnis (Sicherheitsrisiko): $SCR_PATH"
+    # CRITICAL: Skip interactive command creation during installation
+    # The command creation is optional and can be done later manually
+    # During installation, we just create the launcher and desktop entry
+    # User can create the command later if needed
+    local skip_command_creation="${SKIP_COMMAND_CREATION:-false}"
+    
+    # If called during installation (from PhotoshopSetup.sh), skip interactive command creation
+    # This prevents blocking the installation flow
+    if [ "$skip_command_creation" = "true" ]; then
+        log_debug "Skipping interactive command creation during installation"
+    else
+        show_message "${C_YELLOW}→${C_RESET} ${C_CYAN}create photoshop command...${C_RESET}"
+        # CRITICAL: Validation BEFORE sudo operation - prevent privilege escalation
+        # Use centralized security::validate_path function if available
+        if type security::validate_path >/dev/null 2>&1; then
+            if ! security::validate_path "$SCR_PATH"; then
+                error "SCR_PATH zeigt auf System-Verzeichnis (Sicherheitsrisiko): $SCR_PATH"
+                return 1
+            fi
+        else
+            # Fallback to inline validation if security module not loaded
+            if [[ "$SCR_PATH" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
+                error "SCR_PATH zeigt auf System-Verzeichnis (Sicherheitsrisiko): $SCR_PATH"
+                return 1
+            fi
+        fi
+        if [ ! -f "$SCR_PATH/launcher/launcher.sh" ]; then
+            error "Launcher-Script nicht gefunden: $SCR_PATH/launcher/launcher.sh"
             return 1
         fi
-    else
-        # Fallback to inline validation if security module not loaded
-        if [[ "$SCR_PATH" =~ ^/etc|^/usr/bin|^/usr/sbin|^/bin|^/sbin|^/lib|^/var/log|^/root ]]; then
-            error "SCR_PATH zeigt auf System-Verzeichnis (Sicherheitsrisiko): $SCR_PATH"
-            return 1
+        
+        # Try to create system-wide command (requires sudo)
+        # Ask user if they want to create system-wide command or use user-local
+        local command_created=0
+        local command_path="/usr/local/bin/photoshop"
+        local user_bin_dir="$HOME/.local/bin"
+        
+        # Ask user if they want system-wide installation
+        local use_system_wide=false
+        # LANG_CODE should be set by PhotoshopSetup.sh, default to "de" if not set
+        local lang_code="${LANG_CODE:-de}"
+        if [ "$lang_code" = "de" ]; then
+            echo ""
+            log_prompt "   [J] Ja - System-weit installieren (benötigt sudo)  [N] Nein - Nur benutzer-lokal [J/n]: "
+            IFS= read -r -p "   [J] Ja - System-weit installieren (benötigt sudo)  [N] Nein - Nur benutzer-lokal [J/n]: " use_system_response
+            log_input "$use_system_response"
+        else
+            echo ""
+            log_prompt "   [Y] Yes - Install system-wide (requires sudo)  [N] No - User-local only [Y/n]: "
+            IFS= read -r -p "   [Y] Yes - Install system-wide (requires sudo)  [N] No - User-local only [Y/n]: " use_system_response
+            log_input "$use_system_response"
         fi
-    fi
-    if [ ! -f "$SCR_PATH/launcher/launcher.sh" ]; then
-        error "Launcher-Script nicht gefunden: $SCR_PATH/launcher/launcher.sh"
-        return 1
-    fi
+        
+        # Default to system-wide if empty (Enter pressed)
+        if [ -z "$use_system_response" ] || [[ "$use_system_response" =~ ^[JjYy]$ ]]; then
+            use_system_wide=true
+        fi
     
-    # Try to create system-wide command (requires sudo)
-    # Ask user if they want to create system-wide command or use user-local
-    local command_created=0
-    local command_path="/usr/local/bin/photoshop"
-    local user_bin_dir="$HOME/.local/bin"
-    
-    # Ask user if they want system-wide installation
-    local use_system_wide=false
-    # LANG_CODE should be set by PhotoshopSetup.sh, default to "de" if not set
-    local lang_code="${LANG_CODE:-de}"
-    if [ "$lang_code" = "de" ]; then
-        echo ""
-        log_prompt "   [J] Ja - System-weit installieren (benötigt sudo)  [N] Nein - Nur benutzer-lokal [J/n]: "
-        IFS= read -r -p "   [J] Ja - System-weit installieren (benötigt sudo)  [N] Nein - Nur benutzer-lokal [J/n]: " use_system_response
-        log_input "$use_system_response"
-    else
-        echo ""
-        log_prompt "   [Y] Yes - Install system-wide (requires sudo)  [N] No - User-local only [Y/n]: "
-        IFS= read -r -p "   [Y] Yes - Install system-wide (requires sudo)  [N] No - User-local only [Y/n]: " use_system_response
-        log_input "$use_system_response"
-    fi
-    
-    # Default to system-wide if empty (Enter pressed)
-    if [ -z "$use_system_response" ] || [[ "$use_system_response" =~ ^[JjYy]$ ]]; then
-        use_system_wide=true
-    fi
-    
-    # Remove existing command if it exists
-    if [ -f "$command_path" ] || [ -L "$command_path" ]; then
-        show_message "${C_YELLOW}→${C_RESET} ${C_GRAY}photoshop command${C_RESET} existiert, lösche..."
-        if [ "$use_system_wide" = true ]; then
-            # CRITICAL: Validate path before sudo operation
-            if type security::validate_path >/dev/null 2>&1; then
-                if ! security::validate_path "$command_path"; then
-                    warning "Unsafe command path: $command_path"
-                    return 1
+        # Remove existing command if it exists
+        if [ -f "$command_path" ] || [ -L "$command_path" ]; then
+            show_message "${C_YELLOW}→${C_RESET} ${C_GRAY}photoshop command${C_RESET} existiert, lösche..."
+            if [ "$use_system_wide" = true ]; then
+                # CRITICAL: Validate path before sudo operation
+                if type security::validate_path >/dev/null 2>&1; then
+                    if ! security::validate_path "$command_path"; then
+                        warning "Unsafe command path: $command_path"
+                        return 1
+                    fi
                 fi
-            fi
-            # CRITICAL: Don't suppress errors - let user see sudo password prompt
-            sudo rm -f "$command_path" || {
-                warning "$(i18n::get "could_not_remove_command")"
-            }
-        fi
-    fi
-    
-    # Try system-wide installation if user chose it
-    if [ "$use_system_wide" = true ]; then
-        # BEST PRACTICE: Try graphical password prompt first (zenity/systemd-ask-password)
-        # Falls nicht verfügbar, verwendet sudo normal (zeigt Passwort-Abfrage)
-        local sudo_password=""
-        if command -v zenity >/dev/null 2>&1; then
-            # Use zenity for graphical password prompt
-            sudo_password=$(zenity --password --title="$(i18n::get "password_required")" 2>/dev/null || echo "")
-            if [ -n "$sudo_password" ]; then
-                echo "$sudo_password" | sudo -S ln -s "$SCR_PATH/launcher/launcher.sh" "$command_path" 2>/dev/null && command_created=1 || sudo_password=""
-            fi
-        elif command -v systemd-ask-password >/dev/null 2>&1; then
-            # Use systemd-ask-password for systemd-integrated prompt
-            sudo_password=$(systemd-ask-password "$(i18n::get "password_required")" 2>/dev/null || echo "")
-            if [ -n "$sudo_password" ]; then
-                echo "$sudo_password" | sudo -S ln -s "$SCR_PATH/launcher/launcher.sh" "$command_path" 2>/dev/null && command_created=1 || sudo_password=""
+                # CRITICAL: Don't suppress errors - let user see sudo password prompt
+                sudo rm -f "$command_path" || {
+                    warning "$(i18n::get "could_not_remove_command")"
+                }
             fi
         fi
         
-        # Fallback: Use normal sudo (will prompt for password if needed)
-        if [ $command_created -eq 0 ]; then
-            # CRITICAL: Don't suppress errors (2>/dev/null) - let user see sudo password prompt
-            # sudo will prompt for password if needed
-            if sudo ln -s "$SCR_PATH/launcher/launcher.sh" "$command_path"; then
-                command_created=1
-                show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$(i18n::get "command_created_system" "$command_path")${C_RESET}"
-            else
-                warning "$(i18n::get "system_wide_install_failed")"
-                use_system_wide=false  # Fallback to user-local
+        # Try system-wide installation if user chose it
+        if [ "$use_system_wide" = true ]; then
+            # BEST PRACTICE: Try graphical password prompt first (zenity/systemd-ask-password)
+            # Falls nicht verfügbar, verwendet sudo normal (zeigt Passwort-Abfrage)
+            local sudo_password=""
+            if command -v zenity >/dev/null 2>&1; then
+                # Use zenity for graphical password prompt
+                sudo_password=$(zenity --password --title="$(i18n::get "password_required")" 2>/dev/null || echo "")
+                if [ -n "$sudo_password" ]; then
+                    echo "$sudo_password" | sudo -S ln -s "$SCR_PATH/launcher/launcher.sh" "$command_path" 2>/dev/null && command_created=1 || sudo_password=""
+                fi
+            elif command -v systemd-ask-password >/dev/null 2>&1; then
+                # Use systemd-ask-password for systemd-integrated prompt
+                sudo_password=$(systemd-ask-password "$(i18n::get "password_required")" 2>/dev/null || echo "")
+                if [ -n "$sudo_password" ]; then
+                    echo "$sudo_password" | sudo -S ln -s "$SCR_PATH/launcher/launcher.sh" "$command_path" 2>/dev/null && command_created=1 || sudo_password=""
+                fi
             fi
-        fi
-    fi
-    
-    # Fallback or user-local installation
-    if [ $command_created -eq 0 ]; then
-        mkdir -p "$user_bin_dir" 2>/dev/null || true
-        if [ -d "$user_bin_dir" ]; then
-            local user_command_path="$user_bin_dir/photoshop"
-            if [ -f "$user_command_path" ] || [ -L "$user_command_path" ]; then
-                rm -f "$user_command_path" 2>/dev/null || true
-            fi
-            if ln -s "$SCR_PATH/launcher/launcher.sh" "$user_command_path" 2>/dev/null; then
-                command_created=1
-                command_path="$user_command_path"
-                if [ "$lang_code" = "de" ]; then
-                    show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}photoshop command${C_RESET} erstellt (benutzer-lokal: $command_path)"
-                    show_message "${C_YELLOW}⚠${C_RESET} ${C_GRAY}Hinweis: Füge $user_bin_dir zu deinem PATH hinzu, falls noch nicht geschehen${C_RESET}"
+            
+            # Fallback: Use normal sudo (will prompt for password if needed)
+            if [ $command_created -eq 0 ]; then
+                # CRITICAL: Don't suppress errors (2>/dev/null) - let user see sudo password prompt
+                # sudo will prompt for password if needed
+                if sudo ln -s "$SCR_PATH/launcher/launcher.sh" "$command_path"; then
+                    command_created=1
+                    show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$(i18n::get "command_created_system" "$command_path")${C_RESET}"
                 else
-                    show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}photoshop command${C_RESET} created (user-local: $command_path)"
-                    show_message "${C_YELLOW}⚠${C_RESET} ${C_GRAY}Note: Add $user_bin_dir to your PATH if not already done${C_RESET}"
+                    warning "$(i18n::get "system_wide_install_failed")"
+                    use_system_wide=false  # Fallback to user-local
                 fi
             fi
         fi
-    fi
-    
-    if [ $command_created -eq 0 ]; then
-        if [ "$lang_code" = "de" ]; then
-            warning "Konnte photoshop command nicht erstellen (weder system-weit noch benutzer-lokal). Du kannst Photoshop trotzdem mit dem Desktop-Eintrag oder direkt mit $SCR_PATH/launcher/launcher.sh starten."
-        else
-            warning "Could not create photoshop command (neither system-wide nor user-local). You can still start Photoshop with the desktop entry or directly with $SCR_PATH/launcher/launcher.sh"
+        
+        # Fallback or user-local installation
+        if [ $command_created -eq 0 ]; then
+            mkdir -p "$user_bin_dir" 2>/dev/null || true
+            if [ -d "$user_bin_dir" ]; then
+                local user_command_path="$user_bin_dir/photoshop"
+                if [ -f "$user_command_path" ] || [ -L "$user_command_path" ]; then
+                    rm -f "$user_command_path" 2>/dev/null || true
+                fi
+                if ln -s "$SCR_PATH/launcher/launcher.sh" "$user_command_path" 2>/dev/null; then
+                    command_created=1
+                    command_path="$user_command_path"
+                    if [ "$lang_code" = "de" ]; then
+                        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}photoshop command${C_RESET} erstellt (benutzer-lokal: $command_path)"
+                        show_message "${C_YELLOW}⚠${C_RESET} ${C_GRAY}Hinweis: Füge $user_bin_dir zu deinem PATH hinzu, falls noch nicht geschehen${C_RESET}"
+                    else
+                        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}photoshop command${C_RESET} created (user-local: $command_path)"
+                        show_message "${C_YELLOW}⚠${C_RESET} ${C_GRAY}Note: Add $user_bin_dir to your PATH if not already done${C_RESET}"
+                    fi
+                fi
+            fi
+        fi
+        
+        if [ $command_created -eq 0 ]; then
+            if [ "$lang_code" = "de" ]; then
+                warning "Konnte photoshop command nicht erstellen (weder system-weit noch benutzer-lokal). Du kannst Photoshop trotzdem mit dem Desktop-Eintrag oder direkt mit $SCR_PATH/launcher/launcher.sh starten."
+            else
+                warning "Could not create photoshop command (neither system-wide nor user-local). You can still start Photoshop with the desktop entry or directly with $SCR_PATH/launcher/launcher.sh"
+            fi
         fi
     fi
     
-    show_message "${C_GREEN}✓ Launcher erstellt!${C_RESET} Du kannst Photoshop starten mit:"
-    show_message "${C_CYAN}  - Befehl:${C_RESET} ${C_WHITE}photoshop${C_RESET}"
-    show_message "${C_CYAN}  - Desktop-Menü:${C_RESET} ${C_WHITE}Suche nach 'Photoshop'${C_RESET}"
-    show_message "${C_CYAN}  - Direkt:${C_RESET} ${C_WHITE}$SCR_PATH/launcher/launcher.sh${C_RESET}"
-
+    # Silent - don't show launcher creation details to user (irrelevant info)
+    # Launcher is created, that's enough - finish_installation() will show completion message
     unset desktop_entry desktop_entry_dest launcher_path launcher_dest
 }
 
@@ -1483,10 +1526,10 @@ function rmdir_if_exist() {
         else
             rm -rf "$dir" || { error "rmdir_if_exist: Löschen fehlgeschlagen: $dir"; return 1; }
         fi
-        log_debug "$dir directory exists, deleting it..."
+        # log_debug "$dir directory exists, deleting it..."  # Commented out - log_debug may not be available
     fi
     mkdir -p "$dir" || { error "rmdir_if_exist: Erstellen fehlgeschlagen: $dir"; return 1; }
-    log_debug "Created directory: $dir"
+    # log_debug "Created directory: $dir"  # Commented out - log_debug may not be available
 }
 
 # ============================================================================
@@ -1592,15 +1635,15 @@ wait::for_wine_prefix() {
                     
                     # Wait for 2 consecutive stable checks (prevents false positives)
                     if [ $stable_count -ge 2 ]; then
-                        # Also check if system.reg exists (secondary check)
-                        if [ -f "$system_reg" ]; then
+            # Also check if system.reg exists (secondary check)
+            if [ -f "$system_reg" ]; then
                             log_debug "wait::for_wine_prefix: Prefix initialized successfully (user.reg stable at ${current_size} bytes)"
-                            return 0
-                        else
+                    return 0
+                else
                             log_debug "wait::for_wine_prefix: user.reg stable but system.reg missing, continuing..."
                         fi
-                    fi
-                else
+                fi
+            else
                     # Size changed - still being written
                     log_debug "wait::for_wine_prefix: user.reg growing (${current_size} bytes)"
                     stable_count=0
@@ -1661,7 +1704,6 @@ progress::bar() {
     # Show spinner while process is running (simpler and more reliable than progress bar)
     # CRITICAL: Use stderr for spinner output to avoid interfering with process output
     # #region agent log
-    echo "{\"id\":\"log_$(date +%s)_spinner_start\",\"timestamp\":$(date +%s%3N),\"location\":\"sharedFuncs.sh:1372\",\"message\":\"Spinner started\",\"data\":{\"pid\":\"$pid\",\"estimated_time\":$estimated_time,\"interval\":$interval},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\"}" >> /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/.cursor/debug.log 2>/dev/null || true
     # #endregion
     
     local spinstr='|/-\'
@@ -1681,9 +1723,7 @@ progress::bar() {
             printf "\r${C_YELLOW}%s${C_RESET} [%c] (%ds)" "$message" "$spin_char" "$elapsed" >&2
         fi
         
-        # #region agent log
-        echo "{\"id\":\"log_$(date +%s)_spinner_update\",\"timestamp\":$(date +%s%3N),\"location\":\"sharedFuncs.sh:1415\",\"message\":\"Spinner update\",\"data\":{\"elapsed\":$elapsed,\"estimated_time\":$estimated_time},\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\"}" >> /home/benny/Dokumente/Gictorbit-photoshopCClinux-ea730a5/.cursor/debug.log 2>/dev/null || true
-        # #endregion
+        # Debug logging removed
         
         # Update spinner character
         spin_idx=$(((spin_idx + 1) % 4))
@@ -1867,24 +1907,24 @@ function check_arg() {
 
     if [[ $dashd != 1 ]] ;then
         # Only log, don't show to user (less noise)
-        setup_log "-d not defined, using default directory: $HOME/.photoshopCCV19"
+        setup_log "-d not defined, using default directory: $HOME/.photoshop"
         # KRITISCH: Umgebungsvariablen-Validierung - prüfe dass $HOME sicher ist
         if [ -z "$HOME" ] || [ "$HOME" = "/" ] || [ "$HOME" = "/root" ]; then
             error "Unsichere HOME-Umgebungsvariable: ${HOME:-not set}"
             exit 1
         fi
-        SCR_PATH="$HOME/.photoshopCCV19"
+        SCR_PATH="$HOME/.photoshop"
     fi
 
     if [[ $dashc != 1 ]];then
         # Only log, don't show to user (less noise)
-        setup_log "-c not defined, using default cache directory: $HOME/.cache/photoshopCCV19"
+        setup_log "-c not defined, using default cache directory: $HOME/.cache/photoshop"
         # KRITISCH: Umgebungsvariablen-Validierung - prüfe dass $HOME sicher ist
         if [ -z "$HOME" ] || [ "$HOME" = "/" ] || [ "$HOME" = "/root" ]; then
             error "Unsichere HOME-Umgebungsvariable: ${HOME:-not set}"
             exit 1
         fi
-        CACHE_PATH="$HOME/.cache/photoshopCCV19"
+        CACHE_PATH="$HOME/.cache/photoshop"
     fi
 }
 

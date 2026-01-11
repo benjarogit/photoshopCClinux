@@ -22,7 +22,7 @@ GITHUB_REPO="benjarogit/photoshopCClinux"
 GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 
 # Cache file for update check results (to avoid too frequent checks)
-UPDATE_CACHE_FILE="${UPDATE_CACHE_FILE:-$HOME/.photoshopCCV19/.update_cache}"
+UPDATE_CACHE_FILE="${UPDATE_CACHE_FILE:-$HOME/.photoshop/.update_cache}"
 UPDATE_CACHE_TTL="${UPDATE_CACHE_TTL:-86400}"  # 24 hours in seconds
 
 # ============================================================================
@@ -86,9 +86,9 @@ update::get_latest_version() {
     # Fetch latest version from GitHub API
     local latest_version
     if command -v curl >/dev/null 2>&1; then
-        latest_version=$(curl -s "$GITHUB_API" 2>/dev/null | grep -o '"tag_name":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+        latest_version=$(curl -s --connect-timeout 10 --max-time 30 "$GITHUB_API" 2>/dev/null | grep -o '"tag_name":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
     elif command -v wget >/dev/null 2>&1; then
-        latest_version=$(wget -qO- "$GITHUB_API" 2>/dev/null | grep -o '"tag_name":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+        latest_version=$(wget -q --timeout=30 -O- "$GITHUB_API" 2>/dev/null | grep -o '"tag_name":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
     fi
     
     # Cache the result

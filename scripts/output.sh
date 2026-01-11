@@ -58,6 +58,11 @@ output::step() {
         echo "[$timestamp] → $message" >> "$LOG_FILE"
     fi
     
+    # In quiet mode, only log to file, don't output to console
+    if [ "${QUIET:-0}" = "1" ]; then
+        return 0
+    fi
+    
     # Display to console (modern, consistent style)
     printf "${C_YELLOW}→${C_RESET} ${C_CYAN}%s${C_RESET}\n" "$message"
 }
@@ -78,6 +83,11 @@ output::success() {
         echo "[$timestamp] ✓ $message" >> "$LOG_FILE"
     fi
     
+    # In quiet mode, only log to file, don't output to console
+    if [ "${QUIET:-0}" = "1" ]; then
+        return 0
+    fi
+    
     # Display to console (modern, consistent style)
     printf "${C_GREEN}✓${C_RESET} ${C_GREEN}%s${C_RESET}\n" "$message"
 }
@@ -96,6 +106,11 @@ output::warning() {
     # Log to file (plain text)
     if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
         echo "[$timestamp] ⚠ $message" >> "$LOG_FILE"
+    fi
+    
+    # In quiet mode, only log to file, don't output to console
+    if [ "${QUIET:-0}" = "1" ]; then
+        return 0
     fi
     
     # Display to console (modern, consistent style)
@@ -141,6 +156,11 @@ output::info() {
         echo "[$timestamp] ℹ $message" >> "$LOG_FILE"
     fi
     
+    # In quiet mode, only log to file, don't output to console
+    if [ "${QUIET:-0}" = "1" ]; then
+        return 0
+    fi
+    
     # Display to console (modern, consistent style)
     printf "${C_CYAN}ℹ${C_RESET} ${C_CYAN}%s${C_RESET}\n" "$message"
 }
@@ -159,21 +179,39 @@ output::spinner_line() {
 
 # ============================================================================
 # @function output::section
-# @description Display a section header (modern box style) - Modern, beautiful design
+# @description Display a section header (consistent ═══ format)
 # @param $* Optional: Section title
 # @return 0 (always succeeds)
 # @example output::section "Installation Phase 1"
 # ============================================================================
 output::section() {
     local title="${*:-}"
-    local width=65
+    local width=63
     local line=$(printf "═%.0s" $(seq 1 $width))
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date)
+    
+    # Log to file (plain text)
+    if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
+        if [ -n "$title" ]; then
+            echo "[$timestamp] ═══ $title ═══" >> "$LOG_FILE"
+        else
+            echo "[$timestamp] ════════════════════════════════════════════════════════════" >> "$LOG_FILE"
+        fi
+    fi
+    
+    # In quiet mode, only log to file, don't output to console
+    if [ "${QUIET:-0}" = "1" ]; then
+        return 0
+    fi
     
     if [ -n "$title" ]; then
-        # Modern box design with title
-        printf "${C_CYAN}╔%s╗${C_RESET}\n" "$line"
-        printf "${C_CYAN}║${C_RESET} %-$(($width - 2))s ${C_CYAN}║${C_RESET}\n" "$title"
-        printf "${C_CYAN}╚%s╝${C_RESET}\n" "$line"
+        # Consistent header format (same as output::header)
+        printf "${C_CYAN}%s${C_RESET}\n" "$line"
+        # Center title (approximately) - same format as output::header
+        local title_len=${#title}
+        local padding=$(( (width - title_len) / 2 ))
+        printf "${C_CYAN}%*s%s${C_RESET}\n" $padding "" "$title"
+        printf "${C_CYAN}%s${C_RESET}\n" "$line"
     else
         # Simple separator
         printf "${C_CYAN}%s${C_RESET}\n" "$line"
@@ -216,6 +254,11 @@ output::substep() {
         echo "[$timestamp]   $message" >> "$LOG_FILE"
     fi
     
+    # In quiet mode, only log to file, don't output to console
+    if [ "${QUIET:-0}" = "1" ]; then
+        return 0
+    fi
+    
     # Display to console (indented, gray)
     printf "  ${C_GRAY}%s${C_RESET}\n" "$message"
 }
@@ -229,7 +272,14 @@ output::substep() {
 # ============================================================================
 output::box() {
     local message="$*"
-    local width=65
+    # Responsive width based on terminal size, with reasonable limits
+    local width=$(tput cols 2>/dev/null || echo 80)
+    # Clamp between 40 and 80 characters for readability
+    if [ "$width" -lt 40 ]; then
+        width=40
+    elif [ "$width" -gt 80 ]; then
+        width=80
+    fi
     local line=$(printf "─%.0s" $(seq 1 $width))
     
     printf "${C_CYAN}┌%s┐${C_RESET}\n" "$line"
@@ -240,30 +290,42 @@ output::box() {
 
 # ============================================================================
 # @function output::header
-# @description Display a section header with indented content support
+# @description Display a section header (consistent ═══ format)
 # @param $1 Header title
-# @param $2 Optional: Indent level (default: 0)
+# @param $2 Optional: Indent level (default: 0, ignored for consistency)
 # @return 0 (always succeeds)
 # @example output::header "Installation Phase" 0
 # ============================================================================
 output::header() {
     local title="$1"
-    local indent="${2:-0}"
-    local indent_str=""
-    
-    # Create indent string
-    for ((i=0; i<indent; i++)); do
-        indent_str="${indent_str}  "
-    done
+    # Responsive width based on terminal size, with reasonable limits
+    local width=$(tput cols 2>/dev/null || echo 80)
+    # Clamp between 40 and 80 characters for readability
+    if [ "$width" -lt 40 ]; then
+        width=40
+    elif [ "$width" -gt 80 ]; then
+        width=80
+    fi
+    local line=$(printf "═%.0s" $(seq 1 $width))
     
     # Log to file (plain text)
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date)
     if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
-        echo "[$timestamp] $indent_str━━━ $title ━━━" >> "$LOG_FILE"
+        echo "[$timestamp] ═══ $title ═══" >> "$LOG_FILE"
     fi
     
-    # Display to console (with indentation)
-    printf "${indent_str}${C_CYAN}━━━ %s ━━━${C_RESET}\n" "$title"
+    # In quiet mode, only log to file, don't output to console
+    if [ "${QUIET:-0}" = "1" ]; then
+        return 0
+    fi
+    
+    # Display to console (consistent format - same as output::section)
+    printf "${C_CYAN}%s${C_RESET}\n" "$line"
+    # Center title (approximately)
+    local title_len=${#title}
+    local padding=$(( (width - title_len) / 2 ))
+    printf "${C_CYAN}%*s%s${C_RESET}\n" $padding "" "$title"
+    printf "${C_CYAN}%s${C_RESET}\n" "$line"
     echo ""
 }
 
@@ -292,7 +354,25 @@ output::item() {
         echo "[$timestamp] $indent_str• $message" >> "$LOG_FILE"
     fi
     
+    # In quiet mode, only log to file, don't output to console
+    if [ "${QUIET:-0}" = "1" ]; then
+        return 0
+    fi
+    
     # Display to console (with indentation)
     printf "${indent_str}${C_GRAY}•${C_RESET} ${C_WHITE}%s${C_RESET}\n" "$message"
+}
+
+# ============================================================================
+# @function output::empty_line
+# @description Display an empty line (respects quiet mode)
+# @return 0 (always succeeds)
+# @example output::empty_line
+# ============================================================================
+output::empty_line() {
+    # In quiet mode, don't output empty lines
+    if [ "${QUIET:-0}" != "1" ]; then
+        echo ""
+    fi
 }
 

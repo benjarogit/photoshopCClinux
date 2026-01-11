@@ -18,7 +18,7 @@
 # @description Checkpoint management for installation rollback
 # ============================================================================
 
-CHECKPOINT_DIR="${CHECKPOINT_DIR:-$HOME/.photoshopCCV19/checkpoints}"
+CHECKPOINT_DIR="${CHECKPOINT_DIR:-$HOME/.photoshop/checkpoints}"
 
 # ============================================================================
 # @function checkpoint::init

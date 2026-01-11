@@ -23,7 +23,7 @@
 # @param $1 Path to validate
 # @param $2 Optional: Allow root paths (default: false)
 # @return 0 if path is safe, 1 if unsafe
-# @example security::validate_path "$HOME/.photoshopCCV19"
+# @example security::validate_path "$HOME/.photoshop"
 # ============================================================================
 security::validate_path() {
     local path="$1"
@@ -170,6 +170,18 @@ security::safe_eval() {
         fi
     fi
     
+    # Check for dangerous shell injection characters (if no whitelist provided)
+    # When whitelist is provided, we trust the patterns, but still check for obvious injection attempts
+    if [ ${#allowed_patterns[@]} -eq 0 ]; then
+        # Check for shell injection attempts: semicolon, ampersand, pipe, backtick, command substitution
+        # Use case statement to avoid regex parsing issues with shellcheck
+        case "$cmd" in
+            *';'*|*'&'*|*'|'*|*'`'*|*'${'*|*'$('*)
+                return 1
+                ;;
+        esac
+    fi
+    
     # Check for dangerous patterns
     local dangerous_patterns=(
         "rm -rf"
@@ -230,7 +242,7 @@ security::check_file_permissions() {
 # @param $1 Path to remove
 # @param $2 Optional: Error message prefix (default: "filesystem::safe_remove")
 # @return 0 on success, 1 on error
-# @example filesystem::safe_remove "$HOME/.photoshopCCV19"
+# @example filesystem::safe_remove "$HOME/.photoshop"
 # ============================================================================
 filesystem::safe_remove() {
     local path="$1"

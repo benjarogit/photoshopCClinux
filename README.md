@@ -1,24 +1,23 @@
-# Adobe Photoshop Installer for Linux ![Status](https://img.shields.io/badge/status-active%20development-orange)
+# Adobe Photoshop Installer for Linux ![Status](https://img.shields.io/badge/status-production%20ready-green) ![Version](https://img.shields.io/badge/version-3.0.0-blue)
 
 > [!NOTE]
-> **Experimental Status - Work in Progress**
+> **Production Ready - Complete Toolset v3.0.0**
 > 
-> This project is currently **experimental** and under active development. We have achieved significant progress and success, but continue to encounter setbacks that require further adjustments. We are continuously working on improvements and testing all possible scenarios.
+> This project has evolved from a simple installer into a **comprehensive, production-ready toolset** for running Photoshop on Linux. With modular architecture, extensive features, and professional polish, it's ready for widespread use.
 > 
 > **Every hint, fix, or idea is welcome!** Please report issues, share solutions, or contribute improvements via [GitHub Issues](https://github.com/benjarogit/photoshopCClinux/issues).
 > 
-> Your feedback helps make this project better for everyone! 🙏
+> See [CHANGELOG.md](CHANGELOG.md) for what's new in v3.0.0!
 
 > [!IMPORTANT]
 > **Tested and Working Versions**
 > 
-> ✅ **Adobe Photoshop CC 2021 (v22.x)** has been successfully tested with **Wine Standard** and **Proton GE** installation methods.
+> ✅ **Adobe Photoshop CC 2021 (v22.x)** has been successfully tested with **Wine Standard** installation method.
 > 
 > **Note about version numbers**: The specific version I tested is **v22.0.0.35**, but **any Photoshop v22.x version should work**. The exact build number may vary depending on where you obtained your installation files.
 > 
 > 💡 **Recommendation**: Try installation with whatever Photoshop version you have available. If you have CC 2021 (v22.x), it should work well!
 > 
-> ✅ **Proton GE Support**: Proton GE installation is now working successfully! Users can install and run Photoshop using Proton GE. Proton GE is automatically installed if not found.
 > 
 > ✅ **Tested on**: CachyOS Linux (Arch-based) with KDE desktop environment
 > 
@@ -26,7 +25,7 @@
 
 ![Photoshop on Linux](images/Screenshot.png)
 
-![License](https://img.shields.io/badge/license-GPL--3.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![OS](https://img.shields.io/badge/OS-CachyOS-blue) ![Desktop](https://img.shields.io/badge/Desktop-KDE-blue) ![Wine](https://img.shields.io/badge/Wine-5.0%2B-red) ![Proton](https://img.shields.io/badge/Proton-GE-orange) ![Photoshop](https://img.shields.io/badge/Photoshop-CC%202021-blue)
+![License](https://img.shields.io/badge/license-GPL--3.0-blue) ![Platform](https://img.shields.io/badge/platform-Linux-green) ![OS](https://img.shields.io/badge/OS-CachyOS-blue) ![Desktop](https://img.shields.io/badge/Desktop-KDE-blue) ![Wine](https://img.shields.io/badge/Wine-5.0%2B-red) ![Photoshop](https://img.shields.io/badge/Photoshop-CC%202021-blue)
 
 **Run Adobe Photoshop natively on Linux using Wine**
 
@@ -61,15 +60,28 @@ A simple, automated installer that helps you set up Photoshop on Linux. Works on
 
 ## ✨ Features
 
+### Core Installation
 - ✅ **Local Installation** - Uses local installation files (no downloads from Adobe)
 - ✅ **Automatic Setup** - Installs Wine components and dependencies automatically
 - ✅ **Multi-Distribution Support** - Works on CachyOS, Arch, Ubuntu, Fedora, and more
-- ✅ **Pre-Installation Check** - Validates system before installation
-- ✅ **Automatic Troubleshooting** - Built-in diagnostic tools
+- ✅ **Pre-Installation Check** - Validates system before installation with distro-specific hints
 - ✅ **Desktop Integration** - Creates menu entry and terminal command
-- ✅ **GPU Workarounds** - Fixes for common graphics issues
-- ✅ **Multi-Language** - Supports all Photoshop language packs
-- 🧪 **Experimental: Proton GE Support** - Optional Proton GE integration for improved compatibility (see [Proton GE Support](#-experimental-proton-ge-support))
+- ✅ **Multi-Language** - Full i18n support (DE/EN) with external language files
+
+### Advanced Features (v3.0.0)
+- 🔧 **Automatic Troubleshooting** - Built-in diagnostic tools with automatic fixes
+- 📦 **Camera Raw Installer** - Automated installation with MD5 verification
+- 🔄 **Update Check System** - GitHub API integration with caching and timeout protection
+- 💾 **Checkpoint/Rollback** - Safe installation with recovery points
+- 🔒 **Security Module** - Path validation, safe operations, shell injection prevention
+- 📊 **System Information** - Cross-distro system detection and reporting
+- 🎨 **Responsive UI** - Banner, boxes, and headers adapt to terminal width
+- 🔇 **Quiet/Verbose Modes** - `--quiet` / `-q` and `--verbose` / `-v` flags for CI/testing
+- 📝 **Log Rotation** - Automatic compression (gzip) and cleanup of old logs
+- 🚀 **File Opening Support** - Launcher accepts files as parameters ("Open with Photoshop")
+- ⚙️ **Wine Configuration** - Interactive winecfg launcher with tips
+- 🛑 **Kill-Photoshop Utility** - Force termination of stuck processes
+- 🎯 **GPU Workarounds** - Fixes for common graphics issues
 
 ---
 
@@ -226,7 +238,7 @@ chmod +x setup.sh
 │  3) Pre-installation check                 │
 │  4) Troubleshooting                        │
 │  5) Configure wine                         │
-│  6) Uninstall photoshop                    │
+│  6) Uninstall photoshop + killer            │
 │  7) Internet: ON/OFF                       │
 │  8) Language: English/Deutsch              │
 │  9) Exit                                   │
@@ -264,6 +276,34 @@ For stability:
 1. In Photoshop: `Edit > Preferences > Performance` (Ctrl+K)
 2. Uncheck "Use Graphics Processor"
 3. Restart Photoshop
+
+---
+
+## ⚙️ Command Line Options
+
+The installer supports several command-line flags for automation and debugging:
+
+- `--wine-standard`: Use Wine Standard (skip interactive Wine selection menu)
+- `--quiet` / `-q`: Quiet mode - suppress all output except errors (useful for CI/testing)
+- `--verbose` / `-v`: Verbose mode - show debug logs on console (useful for debugging)
+
+### Examples
+
+```bash
+# Standard installation with Wine Standard (non-interactive)
+./setup.sh --wine-standard
+
+# Quiet installation (for CI/testing - only errors shown)
+./setup.sh --quiet --wine-standard
+
+# Verbose installation (for debugging - shows all debug logs)
+./setup.sh --verbose --wine-standard
+
+# Combine flags
+./setup.sh --quiet --wine-standard
+```
+
+**Note:** All output is still logged to files even in quiet mode. Check `~/.photoshop/logs/` for detailed logs.
 
 ---
 
@@ -333,53 +373,6 @@ For stability:
 
 ---
 
-## 🧪 Experimental: Proton GE Support
-
-### What is Proton GE?
-
-[Proton GE](https://github.com/GloriousEggroll/proton-ge-custom) is a community fork of Valve's Proton, optimized for gaming but also useful for desktop applications. It can provide better compatibility than standard Wine for some applications.
-
-### ⚠️ Experimental Status
-
-**Proton GE support is currently EXPERIMENTAL and may not work perfectly for all users.**
-
-We're actively testing and improving Proton GE integration. If you encounter issues:
-- Report them in [GitHub Issues](https://github.com/benjarogit/photoshopCClinux/issues)
-- Try using Standard Wine instead (usually works fine)
-- Help us improve by sharing your experience
-
-### How to Use Proton GE
-
-1. **Install Proton GE** (Arch-based systems):
-   ```bash
-   yay -S proton-ge-custom-bin
-   # or
-   paru -S proton-ge-custom-bin
-   ```
-
-2. **During Installation**:
-   - The installer will detect Proton GE automatically
-   - You can choose between Proton GE and Standard Wine
-   - Proton GE is recommended for better compatibility
-
-3. **Known Limitations**:
-   - **Adobe Installer Buttons**: The Adobe installer uses an IE engine that may not work perfectly with Proton GE. If buttons don't respond:
-     - Install IE8 when prompted (takes 5-10 minutes, but helps)
-     - Wait 15-30 seconds for the installer to load
-     - Use Tab + Enter or Alt+N/Alt+W to navigate
-   - **Steam Auto-Start**: Steam may start automatically when using Proton GE - this is normal
-   - **Winetricks Compatibility**: Some winetricks components may not work perfectly with Proton GE
-
-### Contributing to Proton GE Support
-
-We welcome contributions to improve Proton GE support:
-
-- **Report Issues**: Found a bug? [Open an issue](https://github.com/benjarogit/photoshopCClinux/issues)
-- **Share Solutions**: Found a workaround? Share it in the issues!
-- **Test Different Versions**: Try different Proton GE versions and report results
-- **Improve Documentation**: Help us document what works and what doesn't
-
-**Your help makes this project better for everyone! 🙏**
 
 ---
 
@@ -404,7 +397,7 @@ We welcome contributions to improve Proton GE support:
 
 **Solution:**
 ```bash
-WINEPREFIX=~/.photoshopCCV19/prefix winetricks vcrun2015
+WINEPREFIX=~/.photoshop/prefix winetricks vcrun2015
 ```
 
 ### Issue 3: Liquify Tool Doesn't Work
@@ -419,7 +412,7 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks vcrun2015
 
 **Solution:**
 ```bash
-WINEPREFIX=~/.photoshopCCV19/prefix winetricks fontsmooth=rgb
+WINEPREFIX=~/.photoshop/prefix winetricks fontsmooth=rgb
 ```
 
 ### Issue 5: Installation Hangs at 100%
@@ -428,7 +421,7 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks fontsmooth=rgb
 - Wait 2-3 minutes
 - If nothing happens, close installer (Alt+F4)
 - Installation is likely complete
-- Verify: `ls ~/.photoshopCCV19/prefix/drive_c/Program\ Files/Adobe/`
+- Verify: `ls ~/.photoshop/prefix/drive_c/Program\ Files/Adobe/`
 
 ### Issue 6: "ARKServiceAdmin" Error During Installation
 
@@ -479,7 +472,7 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks fontsmooth=rgb
 
 ### Issue 11: Adobe Installer "Next" Button Doesn't Respond
 
-**Cause:** Adobe installer uses Internet Explorer engine (mshtml.dll) which doesn't work perfectly in Wine/Proton
+**Cause:** Adobe installer uses Internet Explorer engine (mshtml.dll) which doesn't work perfectly in Wine
 
 **Solution:**
 ```
@@ -491,10 +484,10 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks fontsmooth=rgb
    - Or: Alt+N (Next) / Alt+W (Weiter in German)
 4. Click directly on the button (not beside it)
 5. Bring installer window to foreground (Alt+Tab)
-6. If nothing works: Use Standard Wine instead of Proton GE for installation
+6. If nothing works: Try reinstalling Wine components with winetricks
 ```
 
-**Note:** This is a known limitation of Wine/Proton with IE-based installers. The installer has already configured DLL-overrides and registry tweaks to improve compatibility.
+**Note:** This is a known limitation of Wine with IE-based installers. The installer has already configured DLL-overrides and registry tweaks to improve compatibility.
 
 ---
 
@@ -520,13 +513,13 @@ This tool:
 
 ```bash
 # Setup log
-cat ~/.photoshopCCV19/setuplog.log
+cat ~/.photoshop/setuplog.log
 
 # Wine errors
-tail -n 50 ~/.photoshopCCV19/wine-error.log
+tail -n 50 ~/.photoshop/wine-error.log
 
 # Runtime errors
-tail -n 30 ~/.photoshopCCV19/photoshop-runtime.log
+tail -n 30 ~/.photoshop/photoshop-runtime.log
 ```
 
 #### Wine Configuration
@@ -543,7 +536,7 @@ Recommended settings:
 #### Reinstall Components
 
 ```bash
-WINEPREFIX=~/.photoshopCCV19/prefix winetricks --force vcrun2015 msxml6
+WINEPREFIX=~/.photoshop/prefix winetricks --force vcrun2015 msxml6
 ```
 
 ---
@@ -569,7 +562,7 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks --force vcrun2015 msxml6
 
 4. **Enable CSMT**
    ```bash
-   WINEPREFIX=~/.photoshopCCV19/prefix winetricks csmt
+   WINEPREFIX=~/.photoshop/prefix winetricks csmt
    ```
 
 5. **Use Virtual Desktop** (if performance issues)
@@ -600,16 +593,23 @@ WINEPREFIX=~/.photoshopCCV19/prefix winetricks --force vcrun2015 msxml6
 ./setup.sh  # Select Option 6
 ```
 
-This removes:
-- Wine prefix (`~/.photoshopCCV19/`)
+When you select Option 6, you'll see a submenu:
+- **Option 1**: Uninstall Photoshop (complete removal)
+- **Option 2**: Force kill Photoshop processes (if Photoshop is stuck/hanging)
+- **Option 3**: Back to main menu
+
+**Option 1** removes:
+- Wine prefix (`~/.photoshop/`)
 - Desktop entry
 - Terminal command (`/usr/local/bin/photoshop`)
+
+**Option 2** forcefully terminates all Photoshop and Wine processes related to Photoshop. Use this if Photoshop is stuck or not responding.
 
 ### Manual Removal
 
 ```bash
 # Remove installation
-rm -rf ~/.photoshopCCV19/
+rm -rf ~/.photoshop/
 
 # Remove desktop entry
 rm ~/.local/share/applications/photoshop.desktop
@@ -677,8 +677,8 @@ Want to contribute code?
 ### Official Resources
 
 - **German Documentation:** [README.de.md](README.de.md)
-- **Quick Start Guide:** [START_HIER.md](START_HIER.md) (DE) or quick start section above
-- **Testing Guide:** [TESTING.md](TESTING.md)
+- **Changelog:** [CHANGELOG.md](CHANGELOG.md) - See what's new in v3.0.0 and previous versions
+- **Quick Start Guide:** Quick start section above
 - **Wine AppDB:** [Photoshop on Wine](https://appdb.winehq.org/objectManager.php?iId=17&sClass=application)
 
 ### Alternative Solutions
@@ -726,7 +726,7 @@ This project is licensed under the **GPL-2.0 License** - see the [LICENSE](LICEN
 ![GitHub issues](https://img.shields.io/github/issues/benjarogit/photoshopCClinux)
 ![GitHub stars](https://img.shields.io/github/stars/benjarogit/photoshopCClinux)
 
-**Status:** ✅ Production Ready
+**Status:** ✅ Production Ready (v3.0.0 - Complete Toolset)
 
 **Tested on:**
 - CachyOS (Primary)
@@ -754,7 +754,7 @@ Photoshop CC 2021 (v22.x) is tested and confirmed working. CC 2019 (v20.x) shoul
 <details>
 <summary><b>Q: Can I use plugins?</b></summary>
 
-Most plugins work. Install them to: `~/.photoshopCCV19/prefix/drive_c/Program Files/Adobe/Adobe Photoshop CC 2019/Plug-ins/`
+Most plugins work. Install them to: `~/.photoshop/prefix/drive_c/Program Files/Adobe/Adobe Photoshop CC 2019/Plug-ins/`
 </details>
 
 <details>

@@ -48,6 +48,14 @@ if [ -f "$SCRIPT_DIR/scripts/security.sh" ]; then
     source "$SCRIPT_DIR/scripts/security.sh"
 fi
 
+# Load update module for version checking
+if [ -f "$SCRIPT_DIR/scripts/update.sh" ]; then
+    source "$SCRIPT_DIR/scripts/update.sh"
+fi
+
+# Set PROJECT_ROOT for functions that need it (like detect_photoshop_version)
+export PROJECT_ROOT="$SCRIPT_DIR"
+
 # Initialize LANG_CODE (will be set by detect_language if not already set)
 LANG_CODE="${LANG_CODE:-}"
 
@@ -58,21 +66,25 @@ if [ -t 1 ] && [ "$TERM" != "dumb" ]; then
     C_CYAN="\033[0;36;1m"
     C_MAGENTA="\033[0;35;1m"
     C_BLUE="\033[0;34;1m"
+    C_BLUE_LIGHT="\033[1;34m"  # Helles Blau für PS-Logo
     C_YELLOW="\033[0;33;1m"
     C_WHITE="\033[0;37;1m"
     C_GREEN="\033[0;32;1m"
     C_GRAY="\033[0;37m"
     C_RED="\033[1;31m"
+    C_BRACKET="\033[0;90m"  # Dunkles Grau für Klammern
 else
     C_RESET=""
     C_CYAN=""
     C_MAGENTA=""
     C_BLUE=""
+    C_BLUE_LIGHT=""
     C_YELLOW=""
     C_WHITE=""
     C_GREEN=""
     C_GRAY=""
     C_RED=""
+    C_BRACKET=""
 fi
 
 # Detect system language (only if not already set by user)
@@ -97,13 +109,9 @@ msg_choose_option() {
 }
 
 msg_run_photoshop() {
-    if [ "$LANG_CODE" = "de" ]; then
-        echo -e "${C_CYAN}→${C_RESET} ${C_MAGENTA}Starte Photoshop Installation...${C_RESET}"
-        echo -n "Verwende winetricks für Komponenten-Installation..."
-    else
-        echo "run photoshop CC Installation..."
-        echo -n "using winetricks for component installation..."
-    fi
+    # Silent - PhotoshopSetup.sh will show proper headers
+    # Don't show redundant messages here
+    :
 }
 
 msg_run_camera_raw() {
@@ -188,80 +196,74 @@ msg_banner_not_found() {
     fi
 }
 
-function show_wine_selection_menu() {
-    clear && echo ""
+function show_uninstall_menu() {
+    local uninstall_choice=""
     
-    # ANSI Color codes are now global (defined at script start)
-    
-    if [ "$LANG_CODE" = "de" ]; then
-        echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
-        echo -e "${C_MAGENTA}            Wine/Proton Auswahl für Photoshop${C_RESET}"
-        echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
-        echo ""
-        echo -e "  ${C_YELLOW}[1]${C_RESET} ${C_WHITE}Wine Standard installieren${C_RESET}"
-        echo -e "  ${C_YELLOW}[2]${C_RESET} ${C_GREEN}Proton GE installieren (empfohlen)${C_RESET}"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} ${C_WHITE}Zurück zum Hauptmenü${C_RESET}"
-        echo ""
-        IFS= read -r -p "$(echo -e "${C_CYAN}Wähle eine Option [1-3]:${C_RESET} ") " wine_choice
-    else
-        echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
-        echo -e "${C_MAGENTA}            Wine/Proton Selection for Photoshop${C_RESET}"
-        echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
-        echo ""
-        echo -e "  ${C_YELLOW}[1]${C_RESET} ${C_WHITE}Install with Wine Standard${C_RESET}"
-        echo -e "  ${C_YELLOW}[2]${C_RESET} ${C_GREEN}Install with Proton GE (recommended)${C_RESET}"
-        echo -e "  ${C_YELLOW}[3]${C_RESET} ${C_WHITE}Back to main menu${C_RESET}"
-        echo ""
-        IFS= read -r -p "$(echo -e "${C_CYAN}Choose an option [1-3]:${C_RESET} ") " wine_choice
-        # CRITICAL: Sanitize and validate user input
-        if type security::sanitize_input >/dev/null 2>&1; then
-            wine_choice=$(security::sanitize_input "$wine_choice")
-        fi
-        # Validate input is 1-3
-        if [[ ! "$wine_choice" =~ ^[1-3]$ ]]; then
-            if [ "$LANG_CODE" = "de" ]; then
+    while true; do
+        clear && echo ""
+        
+        if [ "$LANG_CODE" = "de" ]; then
+            echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+            echo -e "${C_CYAN}            Photoshop Deinstallation & Prozess-Killer${C_RESET}"
+            echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+            echo ""
+            echo -e "  ${C_YELLOW}[1]${C_RESET} ${C_WHITE}Photoshop deinstallieren${C_RESET}"
+            echo -e "  ${C_YELLOW}[2]${C_RESET} ${C_RED}Photoshop Prozesse zwangsweise beenden${C_RESET}"
+            echo -e "  ${C_YELLOW}[3]${C_RESET} ${C_WHITE}Zurück zum Hauptmenü${C_RESET}"
+            echo ""
+            IFS= read -r -p "$(echo -e "${C_CYAN}Wähle eine Option [1-3]:${C_RESET} ") " uninstall_choice
+            # CRITICAL: Sanitize and validate user input
+            if type security::sanitize_input >/dev/null 2>&1; then
+                uninstall_choice=$(security::sanitize_input "$uninstall_choice")
+            fi
+            # Validate input is 1-3
+            if [[ ! "$uninstall_choice" =~ ^[1-3]$ ]]; then
                 echo -e "${C_RED}Ungültige Eingabe. Bitte wähle 1, 2 oder 3.${C_RESET}"
-            else
+                sleep 1
+                continue
+            fi
+        else
+            echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+            echo -e "${C_CYAN}            Photoshop Uninstall & Process Killer${C_RESET}"
+            echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+            echo ""
+            echo -e "  ${C_YELLOW}[1]${C_RESET} ${C_WHITE}Uninstall Photoshop${C_RESET}"
+            echo -e "  ${C_YELLOW}[2]${C_RESET} ${C_RED}Force kill Photoshop processes${C_RESET}"
+            echo -e "  ${C_YELLOW}[3]${C_RESET} ${C_WHITE}Back to main menu${C_RESET}"
+            echo ""
+            IFS= read -r -p "$(echo -e "${C_CYAN}Choose an option [1-3]:${C_RESET} ") " uninstall_choice
+            # CRITICAL: Sanitize and validate user input
+            if type security::sanitize_input >/dev/null 2>&1; then
+                uninstall_choice=$(security::sanitize_input "$uninstall_choice")
+            fi
+            # Validate input is 1-3
+            if [[ ! "$uninstall_choice" =~ ^[1-3]$ ]]; then
                 echo -e "${C_RED}Invalid input. Please choose 1, 2, or 3.${C_RESET}"
+                sleep 1
+                continue
             fi
-            continue
         fi
-    fi
+        
+        # Valid input received, break out of loop
+        break
+    done
     
-    case "$wine_choice" in
+    case "$uninstall_choice" in
         1)
-            msg_run_photoshop
-            run_script "$SCRIPT_DIR/scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh" --wine-standard
-            local exit_code=$?
-            # Exit code 130 = STRG+C (user interrupt) - return to main menu
-            if [ $exit_code -eq 130 ]; then
-                if [ "$LANG_CODE" = "de" ]; then
-                    echo ""
-                    echo "Installation abgebrochen. Zurück zum Hauptmenü..."
-                else
-                    echo ""
-                    echo "Installation cancelled. Returning to main menu..."
-                fi
-                wait_second 2
-                main
-            fi
+            msg_uninstall
+            run_script "scripts/uninstaller.sh" "uninstaller.sh"
+            wait_second 2
+            main
             ;;
         2)
-            msg_run_photoshop
-            run_script "$SCRIPT_DIR/scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh" --proton-ge
-            local exit_code=$?
-            # Exit code 130 = STRG+C (user interrupt) - return to main menu
-            if [ $exit_code -eq 130 ]; then
-                if [ "$LANG_CODE" = "de" ]; then
-                    echo ""
-                    echo "Installation abgebrochen. Zurück zum Hauptmenü..."
-                else
-                    echo ""
-                    echo "Installation cancelled. Returning to main menu..."
-                fi
-                wait_second 2
-                main
+            if [ "$LANG_CODE" = "de" ]; then
+                echo -e "${C_YELLOW}→${C_RESET} ${C_RED}Beende Photoshop Prozesse zwangsweise...${C_RESET}"
+            else
+                echo -e "${C_YELLOW}→${C_RESET} ${C_RED}Force killing Photoshop processes...${C_RESET}"
             fi
+            run_script "scripts/kill-photoshop.sh" "kill-photoshop.sh"
+            wait_second 2
+            main
             ;;
         3|"")
             main
@@ -278,6 +280,125 @@ function show_wine_selection_menu() {
     esac
 }
 
+# ============================================================================
+# @function show_install_or_update_menu
+# @description Show menu to choose between install or update
+# ============================================================================
+show_install_or_update_menu() {
+    # IMMER Frage stellen, ob installieren oder updaten
+    local choice=""
+    while true; do
+        clear && echo ""
+        if [ "$LANG_CODE" = "de" ]; then
+            echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+            echo -e "${C_CYAN}            Photoshop Installieren oder Updaten?${C_RESET}"
+            echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+            echo ""
+            echo -e "  ${C_YELLOW}[1]${C_RESET} ${C_WHITE}Photoshop installieren${C_RESET}"
+            echo -e "  ${C_YELLOW}[2]${C_RESET} ${C_GREEN}Photoshop updaten${C_RESET}"
+            echo -e "  ${C_YELLOW}[3]${C_RESET} ${C_WHITE}Zurück zum Hauptmenü${C_RESET}"
+            echo ""
+            IFS= read -r -p "$(echo -e "${C_CYAN}Wähle eine Option [1-3]:${C_RESET} ") " choice
+        else
+            echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+            echo -e "${C_CYAN}            Install or Update Photoshop?${C_RESET}"
+            echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
+            echo ""
+            echo -e "  ${C_YELLOW}[1]${C_RESET} ${C_WHITE}Install Photoshop${C_RESET}"
+            echo -e "  ${C_YELLOW}[2]${C_RESET} ${C_GREEN}Update Photoshop${C_RESET}"
+            echo -e "  ${C_YELLOW}[3]${C_RESET} ${C_WHITE}Back to main menu${C_RESET}"
+            echo ""
+            IFS= read -r -p "$(echo -e "${C_CYAN}Choose an option [1-3]:${C_RESET} ") " choice
+        fi
+        
+        # Sanitize input
+        if type security::sanitize_input >/dev/null 2>&1; then
+            choice=$(security::sanitize_input "$choice")
+        fi
+        
+        # Validate input
+        if [[ ! "$choice" =~ ^[1-3]$ ]]; then
+            if [ "$LANG_CODE" = "de" ]; then
+                echo -e "${C_RED}Ungültige Eingabe. Bitte wähle 1, 2 oder 3.${C_RESET}"
+            else
+                echo -e "${C_RED}Invalid input. Please choose 1, 2, or 3.${C_RESET}"
+            fi
+            sleep 1
+            continue
+        fi
+        
+        break
+    done
+    
+    case "$choice" in
+        1)
+            # Install
+            show_wine_selection_menu
+            ;;
+        2)
+            # Update
+            if [ "$LANG_CODE" = "de" ]; then
+                echo "Starte Update..."
+            else
+                echo "Starting update..."
+            fi
+            
+            # Try git pull if in git repository
+            if command -v git >/dev/null 2>&1 && [ -d ".git" ]; then
+                if git pull origin main 2>/dev/null || git pull origin master 2>/dev/null; then
+                    if [ "$LANG_CODE" = "de" ]; then
+                        echo -e "${C_GREEN}Update erfolgreich!${C_RESET}"
+                    else
+                        echo -e "${C_GREEN}Update successful!${C_RESET}"
+                    fi
+                    wait_second 2
+                    main
+                    return 0
+                fi
+            fi
+            
+            # If git pull failed or not in git repo, show manual instructions
+            if [ "$LANG_CODE" = "de" ]; then
+                echo ""
+                echo -e "${C_YELLOW}Git-Update nicht möglich. Bitte manuell updaten:${C_RESET}"
+                echo "1. Gehe zu: https://github.com/benjarogit/photoshopCClinux/releases"
+                echo "2. Lade die neueste Version herunter"
+                echo "3. Ersetze die Dateien im Projekt-Verzeichnis"
+            else
+                echo ""
+                echo -e "${C_YELLOW}Git update not possible. Please update manually:${C_RESET}"
+                echo "1. Go to: https://github.com/benjarogit/photoshopCClinux/releases"
+                echo "2. Download the latest version"
+                echo "3. Replace files in project directory"
+            fi
+            wait_second 5
+            main
+            ;;
+        3|"")
+            main
+            ;;
+    esac
+}
+
+function show_wine_selection_menu() {
+    # Direkt zur Installation mit Wine Standard
+    msg_run_photoshop
+    run_script "$SCRIPT_DIR/scripts/PhotoshopSetup.sh" "PhotoshopSetup.sh" --wine-standard
+    local exit_code=$?
+    # Exit code 130 = STRG+C (user interrupt) - return to main menu
+    if [ $exit_code -eq 130 ]; then
+        if [ "$LANG_CODE" = "de" ]; then
+            echo ""
+            echo "Installation abgebrochen. Zurück zum Hauptmenü..."
+        else
+            echo ""
+            echo "Installation cancelled. Returning to main menu..."
+        fi
+        wait_second 2
+        main
+    fi
+}
+
 function main() {
     # Detect language
     detect_language
@@ -292,8 +413,8 @@ function main() {
     case "$answer" in
 
     1)  
-        # Show Wine selection submenu
-        show_wine_selection_menu
+        # Show Install/Update menu
+        show_install_or_update_menu
         ;;
     2)  
         msg_run_camera_raw
@@ -334,18 +455,12 @@ function main() {
         main
         ;;
     6)  
-        msg_uninstall
-        run_script "scripts/uninstaller.sh" "uninstaller.sh"
-        wait_second 2
-        main
-        ;;
-    7)  
         # Toggle Internet
         toggle_internet
         wait_second 2
         main
         ;;
-    8)  
+    7)  
         # Toggle language
         if [ "$LANG_CODE" = "de" ]; then
             LANG_CODE="en"
@@ -358,8 +473,15 @@ function main() {
         wait_second 2
         main
         ;;
+    8)  
+        show_uninstall_menu
+        ;;
     9)  
         msg_exit
+        # GitHub-Seite automatisch öffnen beim Beenden
+        if type open_url >/dev/null 2>&1; then
+            open_url "https://github.com/benjarogit/photoshopCClinux" 2>/dev/null || true
+        fi
         exitScript
         ;;
     esac
@@ -383,7 +505,7 @@ function run_script() {
     fi
     
     if [ -f "$absolute_script_path" ];then
-        msg_found "$absolute_script_path"
+        # Silent - don't show "found" message to user (irrelevant info)
         chmod +x "$absolute_script_path"
     else
         msg_not_found "$script_name"
@@ -571,6 +693,45 @@ function read_input() {
     IFS="$old_IFS"
 }
 
+# ============================================================================
+# @function open_url
+# @description Open URL in default browser (cross-platform: Linux, macOS, WSL2)
+# @param $1 URL to open
+# @return 0 on success, 1 on error
+# ============================================================================
+open_url() {
+    local url="$1"
+    
+    # macOS
+    if [[ "${OSTYPE:-}" == "darwin"* ]]; then
+        open "$url" 2>/dev/null && return 0
+    fi
+    
+    # WSL2 (Windows Subsystem for Linux)
+    if [ -f /proc/version ] && grep -qi microsoft /proc/version 2>/dev/null; then
+        # Try wslview first (if installed)
+        if command -v wslview >/dev/null 2>&1; then
+            wslview "$url" 2>/dev/null && return 0
+        fi
+        # Fallback to cmd.exe
+        cmd.exe /c start "$url" 2>/dev/null && return 0
+    fi
+    
+    # Linux (default)
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$url" 2>/dev/null && return 0
+    fi
+    
+    # Fallback: Try other common commands
+    for cmd in sensible-browser www-browser links lynx; do
+        if command -v "$cmd" >/dev/null 2>&1; then
+            "$cmd" "$url" 2>/dev/null && return 0
+        fi
+    done
+    
+    return 1
+}
+
 function exitScript() {
     msg_goodbye
 }
@@ -587,6 +748,153 @@ function get_system_info() {
     local wine_ver=$(wine --version 2>/dev/null | cut -d'-' -f2 || echo "not installed")
     
     echo "$distro|$kernel|${ram_gb}GB|$wine_ver"
+}
+
+# ============================================================================
+# @function detect_photoshop_version_from_dir
+# @description Detect Photoshop version from photoshop/ directory
+# @description Cross-platform compatible (Linux, macOS, WSL2) - uses only standard tools
+# @description Based on detect_photoshop_version() from PhotoshopSetup.sh
+# @return Version string (e.g., "CC 2019", "2021", "2022") or empty string
+# ============================================================================
+detect_photoshop_version_from_dir() {
+    local installer_dir="$SCRIPT_DIR/photoshop"
+    local version=""
+    local setup_exe="$installer_dir/Set-up.exe"
+    
+    # Check if photoshop directory exists
+    if [ ! -d "$installer_dir" ]; then
+        return 1
+    fi
+    
+    # METHOD 1: Check Driver.xml (MOST RELIABLE for Adobe installers) - Cross-platform
+    # Driver.xml contains <Name>Photoshop 2021</Name> and <CodexVersion>22.0</CodexVersion>
+    if [ -f "$installer_dir/products/Driver.xml" ]; then
+        local name_line=$(grep -iE "<Name>.*Photoshop.*</Name>" "$installer_dir/products/Driver.xml" 2>/dev/null | head -1)
+        if [ -n "$name_line" ]; then
+            if echo "$name_line" | grep -qiE "2022"; then
+                version="2022"
+            elif echo "$name_line" | grep -qiE "2021"; then
+                version="2021"
+            elif echo "$name_line" | grep -qiE "CC 2019|2019"; then
+                version="CC 2019"
+            fi
+        fi
+        
+        # Also check CodexVersion/BaseVersion (22.0 = 2021, 23.0 = 2022, 20.x = CC 2019)
+        if [ -z "$version" ]; then
+            local codex_version=$(grep -iE "<CodexVersion>|<BaseVersion>" "$installer_dir/products/Driver.xml" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+" | head -1)
+            if [ -n "$codex_version" ]; then
+                local major_version=$(echo "$codex_version" | cut -d. -f1)
+                if [ "$major_version" -ge 23 ]; then
+                    version="2022"
+                elif [ "$major_version" -ge 22 ]; then
+                    version="2021"
+                elif [ "$major_version" -ge 20 ]; then
+                    version="CC 2019"
+                fi
+            fi
+        fi
+    fi
+    
+    # METHOD 2: Check directory structure (Cross-platform - uses find/grep)
+    if [ -z "$version" ]; then
+        # Check for version-specific directories in root (cross-platform safe)
+        for dir in "$installer_dir"/Adobe\ Photoshop*; do
+            if [ -d "$dir" ]; then
+                local dirname=$(basename "$dir")
+                if [[ "$dirname" =~ "2022" ]]; then
+                    version="2022"
+                    break
+                elif [[ "$dirname" =~ "2021" ]]; then
+                    version="2021"
+                    break
+                elif [[ "$dirname" =~ "CC 2019" ]] || [[ "$dirname" =~ "2019" ]]; then
+                    version="CC 2019"
+                    break
+                fi
+            fi
+        done
+        
+        # Also check in packages and products subdirectories
+        if [ -z "$version" ] || [ "$version" = "CC 2019" ]; then
+            for subdir in "$installer_dir/packages" "$installer_dir/products"; do
+                if [ -d "$subdir" ]; then
+                    for item in "$subdir"/*; do
+                        if [ -d "$item" ] || [ -f "$item" ]; then
+                            local basename_item=$(basename "$item")
+                            if [[ "$basename_item" =~ "2022" ]] || [[ "$basename_item" =~ "23\.0" ]]; then
+                                version="2022"
+                                break 2
+                            elif [[ "$basename_item" =~ "2021" ]] || [[ "$basename_item" =~ "22\.0" ]]; then
+                                version="2021"
+                                break 2
+                            elif [[ "$basename_item" =~ "CC 2019" ]] || [[ "$basename_item" =~ "2019" ]] || [[ "$basename_item" =~ "20\.0" ]]; then
+                                if [ -z "$version" ]; then
+                                    version="CC 2019"
+                                fi
+                            fi
+                        fi
+                    done
+                fi
+            done
+        fi
+    fi
+    
+    # METHOD 3: Try to extract version from EXE using cross-platform tools (optional)
+    # Only if other methods failed and tools are available
+    if [ -z "$version" ] && [ -f "$setup_exe" ]; then
+        # Try peres (lightweight, cross-platform if available)
+        if command -v peres >/dev/null 2>&1; then
+            local exe_version=$(peres -v "$setup_exe" 2>/dev/null | awk '{print $3}' | head -1)
+            if [ -n "$exe_version" ] && [[ "$exe_version" =~ ^[0-9] ]]; then
+                local major_version=$(echo "$exe_version" | cut -d. -f1)
+                if [ "$major_version" -ge 23 ]; then
+                    version="2022"
+                elif [ "$major_version" -ge 22 ]; then
+                    version="2021"
+                elif [ "$major_version" -ge 20 ]; then
+                    version="CC 2019"
+                fi
+            fi
+        # Try ExifTool (cross-platform if available)
+        elif command -v exiftool >/dev/null 2>&1; then
+            local product_version=$(exiftool "$setup_exe" 2>/dev/null | grep -iE "Product Version|File Version" | head -1 | grep -oE "[0-9]+\.[0-9]+" | head -1)
+            if [ -n "$product_version" ]; then
+                local major_version=$(echo "$product_version" | cut -d. -f1)
+                if [ "$major_version" -ge 23 ]; then
+                    version="2022"
+                elif [ "$major_version" -ge 22 ]; then
+                    version="2021"
+                elif [ "$major_version" -ge 20 ]; then
+                    version="CC 2019"
+                fi
+            fi
+        fi
+    fi
+    
+    # METHOD 4: Check files in installer directory (cross-platform)
+    if [ -z "$version" ] || [ "$version" = "CC 2019" ]; then
+        for file in "$installer_dir"/*; do
+            if [ -f "$file" ]; then
+                local filename=$(basename "$file")
+                if [[ "$filename" =~ "2022" ]]; then
+                    version="2022"
+                    break
+                elif [[ "$filename" =~ "2021" ]]; then
+                    version="2021"
+                    break
+                fi
+            fi
+        done
+    fi
+    
+    if [ -n "$version" ]; then
+        echo "$version"
+        return 0
+    fi
+    
+    return 1
 }
 
 function banner() {
@@ -616,47 +924,110 @@ function banner() {
         if [ "$active_connections" -gt 0 ]; then
             internet_status="ON "
         else
-            internet_status="OFF"
+            internet_status="OFF "  # Add space to match ON length
         fi
+    else
+        internet_status="N/A "  # Add space for consistent length
+    fi
+    
+    # Determine internet status color - nur der Status-Text (ON/OFF), nicht das ganze
+    local internet_status_text=""
+    local internet_color=""
+    if [ "$internet_status" = "ON " ]; then
+        internet_status_text="ON"
+        internet_color="${C_GREEN}"
+    elif [ "$internet_status" = "OFF " ]; then
+        internet_status_text="OFF"
+        internet_color="${C_RED}"
+    else
+        internet_status_text="N/A"
+        internet_color="${C_GRAY}"
+    fi
+    
+    # Determine language color - nur der Sprache-Text
+    local lang_color="${C_YELLOW}"  # Andere Farbe für Sprache
+    local lang_text=""
+    if [ "$LANG_CODE" = "de" ]; then
+        lang_text="Deutsch"
+    else
+        lang_text="English"
+    fi
+    
+    # Detect Photoshop version from photoshop/ directory
+    local ps_version=""
+    if type detect_photoshop_version_from_dir >/dev/null 2>&1; then
+        ps_version=$(detect_photoshop_version_from_dir 2>/dev/null || echo "")
     fi
     
     if [ "$LANG_CODE" = "de" ]; then
-        local opt1="1- Photoshop installieren"
-        local opt2="2- Camera Raw v12 installieren"
-        local opt3="3- System-Vorprüfung               (empfohlen)"
-        local opt4="4- Fehlerbehebung                  (Troubleshoot)"
-        local opt5="5- Wine konfigurieren              (winecfg)"
-        local opt6="6- Photoshop deinstallieren"
-        local opt7="7- Internet: ${internet_status}                    (Toggle)"
-        local opt8="8- Sprache: Deutsch                (L)"
-        local opt9="9- Beenden"
+        if [ -n "$ps_version" ]; then
+            local opt1="${C_CYAN}1-${C_RESET} Installieren / Update ${C_BRACKET}(${ps_version})${C_RESET}"
+        else
+            local opt1="${C_CYAN}1-${C_RESET} Installieren / Update"
+        fi
+        local opt2="${C_CYAN}2-${C_RESET} Camera Raw v12 installieren"
+        local opt3="${C_CYAN}3-${C_RESET} System-Vorprüfung ${C_BRACKET}(empfohlen)${C_RESET}"
+        local opt4="${C_CYAN}4-${C_RESET} Fehlerbehebung"
+        local opt5="${C_CYAN}5-${C_RESET} Wine konfigurieren ${C_BRACKET}(winecfg)${C_RESET}"
+        local opt6="${C_CYAN}6-${C_RESET} Internet: ${internet_color}${internet_status_text}${C_RESET}"
+        local opt7="${C_CYAN}7-${C_RESET} Sprache: ${lang_color}${lang_text}${C_RESET}"
+        local opt8="${C_CYAN}8-${C_RESET} Deinstallieren / Killen"
+        local opt9="${C_CYAN}9-${C_RESET} Schließen"
         local sys_label="System:"
     else
-        local opt1="1- Install Photoshop"
-        local opt2="2- Install camera raw v12"
-        local opt3="3- Pre-installation check          (recommended)"
-        local opt4="4- Troubleshooting                 (Fix issues)"
-        local opt5="5- configure wine                  (winecfg)"
-        local opt6="6- uninstall photoshop"
-        local opt7="7- Internet: ${internet_status}                    (Toggle)"
-        local opt8="8- Language: English               (L)"
-        local opt9="9- exit"
+        if [ -n "$ps_version" ]; then
+            local opt1="${C_CYAN}1-${C_RESET} Install / Update ${C_BRACKET}(${ps_version})${C_RESET}"
+        else
+            local opt1="${C_CYAN}1-${C_RESET} Install / Update"
+        fi
+        local opt2="${C_CYAN}2-${C_RESET} Install camera raw v12"
+        local opt3="${C_CYAN}3-${C_RESET} Pre-installation check ${C_BRACKET}(recommended)${C_RESET}"
+        local opt4="${C_CYAN}4-${C_RESET} Troubleshooting"
+        local opt5="${C_CYAN}5-${C_RESET} Configure wine ${C_BRACKET}(winecfg)${C_RESET}"
+        local opt6="${C_CYAN}6-${C_RESET} Internet: ${internet_color}${internet_status_text}${C_RESET}"
+        local opt7="${C_CYAN}7-${C_RESET} Language: ${lang_color}${lang_text}${C_RESET}"
+        local opt8="${C_CYAN}8-${C_RESET} Uninstall / Kill"
+        local opt9="${C_CYAN}9-${C_RESET} Exit"
         local sys_label="System:"
     fi
     
     # Banner width for text padding
-    local text_width=62
+    # Use terminal width with reasonable limits (min 62, max 120)
+    local terminal_width=$(tput cols 2>/dev/null || echo 80)
+    local text_width=$terminal_width
+    # Clamp between 62 and 120 for readability
+    if [ "$text_width" -lt 62 ]; then
+        text_width=62
+    elif [ "$text_width" -gt 120 ]; then
+        text_width=120
+    fi
+    
+    # Calculate padding for options (strip ANSI codes for length calculation)
+    # Helper function to strip ANSI codes
+    strip_ansi() {
+        echo "$1" | sed 's/\x1b\[[0-9;]*m//g'
+    }
+    
+    local opt1_plain=$(strip_ansi "$opt1")
+    local opt2_plain=$(strip_ansi "$opt2")
+    local opt3_plain=$(strip_ansi "$opt3")
+    local opt4_plain=$(strip_ansi "$opt4")
+    local opt5_plain=$(strip_ansi "$opt5")
+    local opt6_plain=$(strip_ansi "$opt6")
+    local opt7_plain=$(strip_ansi "$opt7")
+    local opt8_plain=$(strip_ansi "$opt8")
+    local opt9_plain=$(strip_ansi "$opt9")
     
     # Add padding to options (with safety check for negative values)
-    local pad1=$((text_width - ${#opt1})); [ $pad1 -lt 0 ] && pad1=0
-    local pad2=$((text_width - ${#opt2})); [ $pad2 -lt 0 ] && pad2=0
-    local pad3=$((text_width - ${#opt3})); [ $pad3 -lt 0 ] && pad3=0
-    local pad4=$((text_width - ${#opt4})); [ $pad4 -lt 0 ] && pad4=0
-    local pad5=$((text_width - ${#opt5})); [ $pad5 -lt 0 ] && pad5=0
-    local pad6=$((text_width - ${#opt6})); [ $pad6 -lt 0 ] && pad6=0
-    local pad7=$((text_width - ${#opt7})); [ $pad7 -lt 0 ] && pad7=0
-    local pad8=$((text_width - ${#opt8})); [ $pad8 -lt 0 ] && pad8=0
-    local pad9=$((text_width - ${#opt9})); [ $pad9 -lt 0 ] && pad9=0
+    local pad1=$((text_width - ${#opt1_plain})); [ $pad1 -lt 0 ] && pad1=0
+    local pad2=$((text_width - ${#opt2_plain})); [ $pad2 -lt 0 ] && pad2=0
+    local pad3=$((text_width - ${#opt3_plain})); [ $pad3 -lt 0 ] && pad3=0
+    local pad4=$((text_width - ${#opt4_plain})); [ $pad4 -lt 0 ] && pad4=0
+    local pad5=$((text_width - ${#opt5_plain})); [ $pad5 -lt 0 ] && pad5=0
+    local pad6=$((text_width - ${#opt6_plain})); [ $pad6 -lt 0 ] && pad6=0
+    local pad7=$((text_width - ${#opt7_plain})); [ $pad7 -lt 0 ] && pad7=0
+    local pad8=$((text_width - ${#opt8_plain})); [ $pad8 -lt 0 ] && pad8=0
+    local pad9=$((text_width - ${#opt9_plain})); [ $pad9 -lt 0 ] && pad9=0
     
     opt1="${opt1}$(printf '%*s' $pad1 '')"
     opt2="${opt2}$(printf '%*s' $pad2 '')"
@@ -690,25 +1061,69 @@ function banner() {
     [ $sys_padding -lt 0 ] && sys_padding=0
     sys_info_line="${sys_info_line}$(printf '%*s' $sys_padding '')"
     
+    # Load update module and get version info
+    local current_version=""
+    local latest_version=""
+    local version_display="Photoshop Installer"
+    
+    if type update::get_current_version >/dev/null 2>&1; then
+        current_version=$(update::get_current_version 2>/dev/null || echo "")
+        latest_version=$(update::get_latest_version 2>/dev/null || echo "")
+        
+        # Clean version strings - remove git commit hash if present (e.g., "v2.2.18-16-g8f6dc65" -> "v2.2.18")
+        if [ -n "$current_version" ]; then
+            current_version=$(echo "$current_version" | sed 's/-[0-9]*-g[0-9a-f]*$//')
+            # Ensure it starts with 'v' if it's a version number
+            if [[ ! "$current_version" =~ ^v ]]; then
+                current_version="v${current_version}"
+            fi
+        fi
+        
+        if [ -n "$latest_version" ]; then
+            # Remove 'v' prefix for comparison, but keep it for display
+            latest_version=$(echo "$latest_version" | sed 's/^v//')
+        fi
+        
+        if [ -n "$current_version" ] && [ "$current_version" != "unknown" ]; then
+            # Remove 'v' prefix from current_version for display (we add it back)
+            local current_clean=$(echo "$current_version" | sed 's/^v//')
+            version_display="Photoshop Installer ${current_version}"
+            
+            # If update available, add GitHub version in brackets
+            if [ -n "$latest_version" ] && type update::compare_versions >/dev/null 2>&1; then
+                if update::compare_versions "$current_version" "v${latest_version}" 2>/dev/null; then
+                    version_display="Photoshop Installer ${current_version} ${C_GRAY}(v${latest_version})${C_RESET}"
+                fi
+            fi
+        fi
+    fi
+    
     # Print colored banner with echo -e (bash/sh compatible)
-    echo -e "${C_CYAN}                     ┏━━━━━━━━━━━━━━━━━━━━━━━━━┫ ${C_MAGENTA}Photoshop Installer${C_CYAN} ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━┓${C_RESET}"
-    echo -e "${C_CYAN}                     ┃${C_RESET} ${C_GRAY}${sys_info_line}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_CYAN}                     ┃${C_RESET}                                                                           ${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ███████████████████████████${C_RESET}                                                                    ${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██${C_RESET}                       ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt1}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███████▆▃${C_RESET}            ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt2}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███   ▝██▙${C_RESET}           ${C_BLUE}██${C_RESET}      ${C_GREEN}${opt3}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███    ███${C_RESET}           ${C_BLUE}██${C_RESET}      ${C_GREEN}${opt4}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███   ▟██▛▗▟████▙${C_RESET}    ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt5}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███████▛  ██▋${C_RESET}        ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt6}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███       ▝▜█████▙${C_RESET}   ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt7}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███             ██▌${C_RESET}  ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt8}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██  ███        ▗▟████▛${C_RESET}   ${C_BLUE}██${C_RESET}                                                                    ${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ██${C_RESET}                       ${C_BLUE}██${C_RESET}      ${C_YELLOW}${opt9}${C_CYAN}┃${C_RESET}"
-    echo -e "${C_BLUE}  ███████████████████████████${C_RESET}                                                                    ${C_CYAN}┃${C_RESET}"
-    echo -e "${C_CYAN}                     ┃${C_RESET}                                                                           ${C_CYAN}┃${C_RESET}"
-    echo -e "${C_CYAN}                     ┗━━━━━━━━━━━━━━━┫ ${C_WHITE}https://github.com/benjarogit/photoshopCClinux${C_CYAN} ┣━━━━━━━━━━┛${C_RESET}"
-    echo -e "                     ${C_WHITE}${copyright}${C_RESET}"
+    echo -e "${C_CYAN}                     ┏━━━━━━━━━━━━━━━━━━━━━━━━━┫ ${C_MAGENTA}${version_display}${C_CYAN} ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━┓${C_RESET}"
+    echo -e "${C_CYAN}                     ┃${C_RESET} ${C_GRAY}${sys_info_line}${C_RESET}"
+    echo -e "${C_CYAN}                     ┃${C_RESET}                                                                           ${C_RESET}"
+    echo -e "${C_BLUE}  ███████████████████████████${C_RESET}                                                                    ${C_RESET}"
+    echo -e "${C_BLUE}  ██${C_RESET}                       ${C_BLUE_LIGHT}██${C_RESET}      ${opt1}${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███████▆▃${C_RESET}            ${C_BLUE_LIGHT}██${C_RESET}      ${opt2}${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███   ▝██▙${C_RESET}           ${C_BLUE_LIGHT}██${C_RESET}      ${opt3}${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███    ███${C_RESET}           ${C_BLUE_LIGHT}██${C_RESET}      ${opt4}${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███   ▟██▛▗▟████▙${C_RESET}    ${C_BLUE_LIGHT}██${C_RESET}      ${opt5}${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███████▛  ██▋${C_RESET}        ${C_BLUE_LIGHT}██${C_RESET}      ${opt6}${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███       ▝▜█████▙${C_RESET}   ${C_BLUE_LIGHT}██${C_RESET}      ${opt7}${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███             ██▌${C_RESET}  ${C_BLUE_LIGHT}██${C_RESET}      ${opt8}${C_RESET}"
+    echo -e "${C_BLUE}  ██  ███        ▗▟████▛${C_RESET}   ${C_BLUE_LIGHT}██${C_RESET}                                                                    ${C_RESET}"
+    echo -e "${C_BLUE}  ██${C_RESET}                       ${C_BLUE_LIGHT}██${C_RESET}      ${opt9}${C_RESET}"
+    echo -e "${C_BLUE}  ███████████████████████████${C_RESET}                                                                    ${C_RESET}"
+    echo -e "${C_CYAN}                     ┃${C_RESET}                                                                           ${C_RESET}"
+    # GitHub link with OSC 8 for clickable links in modern terminals
+    local github_url="https://github.com/benjarogit/photoshopCClinux"
+    # Use printf to properly escape ANSI codes
+    printf "${C_CYAN}                     ┗━━━━━━━━━━━━━━━┫ "
+    printf "\033]8;;%s\033\\" "$github_url"
+    printf "${C_WHITE}%s" "$github_url"
+    printf "\033]8;;\033\\"
+    printf "${C_CYAN} ┣━━━━━━━━━━┛${C_RESET}\n"
+    echo -e "                     ${C_GRAY}${copyright}${C_RESET}"
     
     echo ""
 }

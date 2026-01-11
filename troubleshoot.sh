@@ -24,10 +24,37 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Pfade
+# Pfade - verwende load_paths() für Kompatibilität mit altem und neuem Pfad
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source sharedFuncs.sh to use load_paths()
+if [ -f "$SCRIPT_DIR/scripts/sharedFuncs.sh" ]; then
+    source "$SCRIPT_DIR/scripts/sharedFuncs.sh" 2>/dev/null || true
+    # Try to load paths (skip validation for troubleshooting)
+    if [ -f "$HOME/.psdata.txt" ]; then
+        load_paths "true" 2>/dev/null || true
+    fi
+fi
+
+# Fallback to default paths if load_paths didn't work
+SCR_PATH="${SCR_PATH:-$HOME/.photoshop}"
+# Also check old path for compatibility
+if [ ! -d "$SCR_PATH" ] && [ -d "$HOME/.photoshopCCV19" ]; then
 SCR_PATH="$HOME/.photoshopCCV19"
+fi
+
 WINE_PREFIX="$SCR_PATH/prefix"
+
+# Use new structured logs if available, fallback to old location
+if [ -d "$SCRIPT_DIR/logs" ]; then
+    # Find most recent wine log
+    LOG_FILE=$(find "$SCRIPT_DIR/logs" -name "wine_*.log" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
+    if [ -z "$LOG_FILE" ] || [ ! -f "$LOG_FILE" ]; then
+        # Fallback to old location
+        LOG_FILE="$SCR_PATH/wine-error.log"
+    fi
+else
 LOG_FILE="$SCR_PATH/wine-error.log"
+fi
 
 # Zähler für Probleme
 ISSUES_FOUND=0
@@ -251,6 +278,22 @@ echo "────────────────────────�
 echo "5. Analysiere Log-Dateien"
 echo "─────────────────────────────────────────────────────────────"
 
+# Check for logs in new structured location
+LOG_DIR="$SCRIPT_DIR/logs"
+if [ -d "$LOG_DIR" ]; then
+    # Find most recent installation log
+    INSTALL_LOG=$(find "$LOG_DIR" -name "Installation_*.log" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
+    ERROR_LOG=$(find "$LOG_DIR" -name "*_errors.log" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
+    
+    if [ -n "$INSTALL_LOG" ] && [ -f "$INSTALL_LOG" ]; then
+        check_ok "Installations-Log gefunden: $(basename "$INSTALL_LOG")"
+        LOG_FILE="$INSTALL_LOG"
+    elif [ -n "$ERROR_LOG" ] && [ -f "$ERROR_LOG" ]; then
+        check_ok "Fehler-Log gefunden: $(basename "$ERROR_LOG")"
+        LOG_FILE="$ERROR_LOG"
+    fi
+fi
+
 if [ -f "$LOG_FILE" ]; then
     check_ok "Log-Datei gefunden: $LOG_FILE"
     
@@ -258,17 +301,17 @@ if [ -f "$LOG_FILE" ]; then
     echo ""
     echo "Suche nach bekannten Fehlern in Logs..."
     
-    if grep -q "VCRUNTIME140.dll" "$LOG_FILE"; then
+    if grep -q "VCRUNTIME140.dll\|vcrun" "$LOG_FILE" 2>/dev/null; then
         check_error "VCRUNTIME140.dll Fehler in Logs gefunden"
         echo "        → Lösung: WINEPREFIX=$WINE_PREFIX winetricks vcrun2015"
     fi
     
-    if grep -q "d3d11" "$LOG_FILE"; then
+    if grep -q "d3d11" "$LOG_FILE" 2>/dev/null; then
         check_warning "DirectX 11 Warnungen gefunden (GPU-Probleme möglich)"
         echo "        → Lösung: GPU-Beschleunigung in Photoshop deaktivieren"
     fi
     
-    if grep -q "X Error" "$LOG_FILE"; then
+    if grep -q "X Error\|X11" "$LOG_FILE" 2>/dev/null; then
         check_warning "X11 Fehler gefunden (Grafik-Probleme möglich)"
         echo "        → Lösung: Virtual Desktop in winecfg aktivieren"
     fi
@@ -277,11 +320,18 @@ if [ -f "$LOG_FILE" ]; then
     echo ""
     echo "Letzte 10 Fehlerzeilen aus Logs:"
     echo "─────────────────────────────────────────────────────────────"
-    grep -i "error\|err:" "$LOG_FILE" | tail -n 10 | while read -r line; do
+    grep -i "error\|err:" "$LOG_FILE" 2>/dev/null | tail -n 10 | while read -r line; do
         echo "  $line"
-    done
+    done || echo "  (Keine Fehler gefunden)"
 else
     check_warning "Keine Log-Datei gefunden (normal vor erstem Start)"
+    if [ -d "$LOG_DIR" ]; then
+        echo "        → Log-Verzeichnis: $LOG_DIR"
+        echo "        → Verfügbare Logs:"
+        ls -1 "$LOG_DIR"/*.log 2>/dev/null | head -5 | while read -r log; do
+            echo "          - $(basename "$log")"
+        done || echo "          (Keine Logs gefunden)"
+    fi
 fi
 
 echo ""
@@ -368,7 +418,11 @@ echo "2. VCRUNTIME140.dll fehlt:"
 echo "   → WINEPREFIX=$WINE_PREFIX winetricks vcrun2015"
 echo ""
 echo "3. Photoshop startet nicht:"
+if [ -f "$LOG_FILE" ]; then
 echo "   → Prüfe Logs: tail -n 50 $LOG_FILE"
+else
+    echo "   → Prüfe Logs: tail -n 50 $LOG_DIR/*.log"
+fi
 echo "   → Versuche: WINEPREFIX=$WINE_PREFIX winecfg"
 echo "   → Setze Windows-Version auf Windows 10"
 echo ""
@@ -382,6 +436,8 @@ echo "Weitere Hilfe: README.de.md oder GitHub Issues"
 echo "https://github.com/Gictorbit/photoshopCClinux/issues"
 echo ""
 
-
-
+# Return to main menu
+echo ""
+read -p "Drücke Enter, um zum Hauptmenü zurückzukehren... " dummy
+exit 0
 

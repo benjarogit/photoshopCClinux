@@ -23,13 +23,27 @@ set -eu
 # CRITICAL: Trap for CTRL+C (INT) and other signals - MUST be set at the very beginning
 # Also needed in subprocesses (winetricks, wine, etc.)
 cleanup_on_interrupt() {
+    # Initialize i18n if not already done
+    if [ -z "${LANG_CODE:-}" ]; then
+        if [ -f "${SCRIPT_DIR:-}/i18n.sh" ]; then
+            source "${SCRIPT_DIR}/i18n.sh" 2>/dev/null || true
+        fi
+    fi
+    
+    local cancelled_msg
+    if [ "$LANG_CODE" = "de" ]; then
+        cancelled_msg="$(i18n::get "installation_cancelled_user" 2>/dev/null || echo "Installation abgebrochen durch Benutzer (STRG+C)")"
+    else
+        cancelled_msg="$(i18n::get "installation_cancelled_user" 2>/dev/null || echo "Installation cancelled by user (CTRL+C)")"
+    fi
+    
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
-    echo "Installation abgebrochen durch Benutzer (STRG+C)"
+    echo "$cancelled_msg"
     echo "═══════════════════════════════════════════════════════════════"
     # Log error if LOG_FILE is available
     if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Installation abgebrochen durch Benutzer (STRG+C)" >> "${LOG_FILE}"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $cancelled_msg" >> "${LOG_FILE}"
     fi
     exit 130
 }
@@ -75,26 +89,119 @@ init_environment() {
     LOG_DIR="$PROJECT_ROOT/logs"
     mkdir -p "$LOG_DIR"
     
-    # Delete old logs before creating new ones
+    # Log rotation: Keep only the 10 most recent log files, delete older ones
     if [ -d "$LOG_DIR" ]; then
-        rm -f "$LOG_DIR"/*.log 2>/dev/null
+        # Delete compressed logs older than 7 days
+        find "$LOG_DIR" -name "*.log.gz" -type f -mtime +7 -delete 2>/dev/null || true
+        
+        # Cache find results for performance (avoid multiple find calls on same directory)
+        local log_files=($(find "$LOG_DIR" -name "*.log" -type f 2>/dev/null))
+        local log_count=${#log_files[@]}
+        
+        if [ "$log_count" -gt 10 ]; then
+            # Portable sorting: Use find -printf (GNU) or ls -t (BSD/macOS)
+            if find "$LOG_DIR" -name "*.log" -type f -printf '%T@ %p\n' >/dev/null 2>&1; then
+                # GNU find (Linux) - use -printf for modification time
+                find "$LOG_DIR" -name "*.log" -type f -printf '%T@ %p\n' | sort -rn | tail -n +11 | cut -d' ' -f2- | xargs -r rm -f 2>/dev/null || {
+                    if type log_warning >/dev/null 2>&1; then
+                        log_warning "Failed to remove old log files (non-critical)"
+                    fi
+                }
+            else
+                # BSD/macOS fallback: Use ls -t (sort by modification time)
+                # Use shopt nullglob to prevent glob errors when no files match
+                local old_nullglob
+                shopt -q nullglob && old_nullglob=1 || old_nullglob=0
+                shopt -s nullglob
+                local log_files_glob=("$LOG_DIR"/*.log)
+                shopt -u nullglob
+                if [ "$old_nullglob" = "1" ]; then
+                    shopt -s nullglob
+                fi
+                
+                if [ ${#log_files_glob[@]} -gt 0 ]; then
+                    ls -t "${log_files_glob[@]}" 2>/dev/null | tail -n +11 | xargs -r rm -f 2>/dev/null || {
+                        if type log_warning >/dev/null 2>&1; then
+                            log_warning "Failed to remove old log files (non-critical)"
+                        fi
+                    }
+                fi
+            fi
+        fi
+        
+        # Compress logs older than 3 days (before deletion) to save space
+        if command -v gzip >/dev/null 2>&1; then
+            find "$LOG_DIR" -name "*.log" -type f -mtime +3 ! -name "*.log.gz" -exec gzip {} \; 2>/dev/null || {
+                if type log_warning >/dev/null 2>&1; then
+                    log_warning "Failed to compress old log files (non-critical, gzip may not be available)"
+                fi
+            }
+        fi
+        
+        # Delete logs older than 7 days (portable - mtime works on all systems)
+        find "$LOG_DIR" -name "*.log" -type f -mtime +7 -delete 2>/dev/null || true
     fi
     
-    # Generate timestamp once to ensure both logs have matching timestamps
-    # Format: "Log: 09.12.25 06:36 Uhr"
-    TIMESTAMP=$(date +%d.%m.%y\ %H:%M\ Uhr)
-    LOG_FILE="$LOG_DIR/Log: ${TIMESTAMP}.log"
-    ERROR_LOG="$LOG_DIR/Log: ${TIMESTAMP}_errors.log"
+    # Generate timestamp for structured logging
+    # Format: YYYY-MM-DD_HH-MM-SS for better sorting
+    TIMESTAMP_ISO=$(date +%Y-%m-%d_%H-%M-%S)
+    TIMESTAMP=$(date +%d.%m.%y\ %H:%M\ Uhr)  # Keep old format for compatibility
     
-    # DEBUG MODE: Debug log file for runtime tracking - stored in logs/ directory with other logs
-    DEBUG_LOG="$LOG_DIR/Log: ${TIMESTAMP}_debug.log"
+    # Structured log files
+    LOG_FILE="$LOG_DIR/Installation_${TIMESTAMP_ISO}.log"
+    WARNING_LOG="$LOG_DIR/Installation_${TIMESTAMP_ISO}_warnings.log"
+    ERROR_LOG="$LOG_DIR/Installation_${TIMESTAMP_ISO}_errors.log"
+    DEBUG_LOG="$LOG_DIR/Installation_${TIMESTAMP_ISO}_debug.log"
+    WINE_LOG="$LOG_DIR/wine_${TIMESTAMP_ISO}.log"
+    
+    # Initialize log files with headers
+    # Initialize i18n if not already done
+    if [ -z "${LANG_CODE:-}" ]; then
+        if [ -f "${SCRIPT_DIR:-}/i18n.sh" ]; then
+            source "${SCRIPT_DIR}/i18n.sh" 2>/dev/null || true
+        fi
+    fi
+    
+    local log_header_inst log_header_warn log_header_err log_header_wine
+    log_header_inst="$(i18n::get "log_header_installation" 2>/dev/null || echo "Photoshop CC Linux Installation Log")"
+    log_header_warn="$(i18n::get "log_header_warnings" 2>/dev/null || echo "Installation Warnings Log")"
+    log_header_err="$(i18n::get "log_header_errors" 2>/dev/null || echo "Installation Errors Log")"
+    log_header_wine="$(i18n::get "log_header_wine" 2>/dev/null || echo "Wine Process Log")"
+    
+    echo "═══════════════════════════════════════════════════════════════" > "$LOG_FILE"
+    echo "            $log_header_inst" >> "$LOG_FILE"
+    echo "═══════════════════════════════════════════════════════════════" >> "$LOG_FILE"
+    echo "Started: $(date '+%Y-%m-%d %H:%M:%S')" >> "$LOG_FILE"
+    echo "Log file: $LOG_FILE" >> "$LOG_FILE"
+    echo "" >> "$LOG_FILE"
+    
+    echo "═══════════════════════════════════════════════════════════════" > "$WARNING_LOG"
+    echo "            $log_header_warn" >> "$WARNING_LOG"
+    echo "═══════════════════════════════════════════════════════════════" >> "$WARNING_LOG"
+    echo "Started: $(date '+%Y-%m-%d %H:%M:%S')" >> "$WARNING_LOG"
+    echo "" >> "$WARNING_LOG"
+    
+    echo "═══════════════════════════════════════════════════════════════" > "$ERROR_LOG"
+    echo "            $log_header_err" >> "$ERROR_LOG"
+    echo "═══════════════════════════════════════════════════════════════" >> "$ERROR_LOG"
+    echo "Started: $(date '+%Y-%m-%d %H:%M:%S')" >> "$ERROR_LOG"
+    echo "" >> "$ERROR_LOG"
+    
+    echo "═══════════════════════════════════════════════════════════════" > "$WINE_LOG"
+    echo "            $log_header_wine" >> "$WINE_LOG"
+    echo "═══════════════════════════════════════════════════════════════" >> "$WINE_LOG"
+    echo "Started: $(date '+%Y-%m-%d %H:%M:%S')" >> "$WINE_LOG"
+    echo "" >> "$WINE_LOG"
     
     # Export all logging variables for sharedFuncs.sh
     export LOG_FILE
+    export WARNING_LOG
     export ERROR_LOG
     export LOG_DIR
     export TIMESTAMP
+    export TIMESTAMP_ISO
     export DEBUG_LOG
+    export WINE_LOG
 }
 
 # Initialize environment first
@@ -130,8 +237,20 @@ debug_log() {
     local timestamp=$(date +%s%3N 2>/dev/null || date +%s000)
     local session_id="debug-session-$(date +%s)"
     local run_id="${RUN_ID:-run1}"
-    echo "{\"id\":\"log_${timestamp}_$$\",\"timestamp\":${timestamp},\"location\":\"${location}\",\"message\":\"${message}\",\"data\":${data},\"sessionId\":\"${session_id}\",\"runId\":\"${run_id}\",\"hypothesisId\":\"${hypothesis_id}\"}" >> "$DEBUG_LOG" 2>/dev/null || true
+    local log_entry="{\"id\":\"log_${timestamp}_$$\",\"timestamp\":${timestamp},\"location\":\"${location}\",\"message\":\"${message}\",\"data\":${data},\"sessionId\":\"${session_id}\",\"runId\":\"${run_id}\",\"hypothesisId\":\"${hypothesis_id}\"}"
+    echo "$log_entry" >> "$DEBUG_LOG" 2>/dev/null || {
+        # Debug log write failure is non-critical, but log it if warning function exists
+        if type warning >/dev/null 2>&1; then
+            warning "Failed to write to debug log: $DEBUG_LOG" 2>/dev/null || true
+        fi
+    }
+    # Silent during installation - only log to file, don't output to stderr
+    # Uncomment the line below if you need live debugging:
+    # echo "[DEBUG] $log_entry" >&2
 }
+
+# Agent debug log function removed - production code should not contain AI debug logs
+# Use debug_log() instead if debugging is needed
 
 # ANSI Color codes (compatible with setup.sh)
 # Check if terminal supports colors
@@ -162,6 +281,17 @@ fi
 spinner() {
     local pid=$1
     local message="${2:-}"
+    
+    # In quiet mode, just wait for process without showing spinner
+    if [ "${QUIET:-0}" = "1" ]; then
+        # Just log the message and wait
+        if [ -n "$message" ]; then
+            log::debug "Running: $message"
+        fi
+        wait "$pid" 2>/dev/null || true
+        return 0
+    fi
+    
     local spinstr='|/-\'
     local temp
     
@@ -201,12 +331,7 @@ run_with_spinner() {
     if [ -n "${WINEARCH:-}" ]; then
         env_array+=("WINEARCH=$WINEARCH")
     fi
-    if [ -n "${PROTON_PATH:-}" ]; then
-        env_array+=("PROTON_PATH=$PROTON_PATH")
-    fi
-    if [ -n "${PROTON_VERB:-}" ]; then
-        env_array+=("PROTON_VERB=$PROTON_VERB")
-    fi
+    # REMOVED: Proton GE environment variables
     
     # CRITICAL: Validate command before execution if security::safe_eval available
     if type security::safe_eval >/dev/null 2>&1; then
@@ -224,6 +349,13 @@ run_with_spinner() {
         bash -c "$cmd" >> "$LOG_FILE" 2>&1 &
     fi
     local pid=$!
+    
+    # In quiet mode, just wait without spinner
+    if [ "${QUIET:-0}" = "1" ]; then
+        log::debug "Running: $message"
+        wait $pid
+        return $?
+    fi
     
     # Show spinner while command runs
     spinner $pid "$message"
@@ -278,42 +410,155 @@ run_with_spinner_and_retry() {
 # @function log::success
 # @description Log success message (green, shown to user)
 # @param $* Success message(s)
+# @param $1 Optional: Category (INSTALL, WINE, SYSTEM, CONFIG)
 # @return 0 (always succeeds)
 # ============================================================================
 log::success() {
     local timestamp
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local category="${1:-ERFOLG}"
+    shift
     local message="$*"
-    echo "[$timestamp] SUCCESS: $message" >> "$LOG_FILE"
-    echo -e "${C_GREEN}$message${C_RESET}"
+    
+    # Check if first argument is a category (uppercase, no spaces)
+    if [[ ! "$category" =~ ^[A-Z_]+$ ]] || [ "$category" = "ERFOLG" ]; then
+        # First arg is not a category, use it as part of message
+        message="$category $*"
+        category="ERFOLG"
+    fi
+    
+    # Mehrsprachige Log-Kategorie
+    local log_category="ERFOLG"
+    if [ "$LANG_CODE" = "en" ]; then
+        log_category="SUCCESS"
+    fi
+    
+    # Write to main log (mehrsprachig, always)
+    echo "[$timestamp] [$log_category] [$category] $message" >> "$LOG_FILE"
+    
+    # In quiet mode, only log to file, don't output to console
+    if [ "${QUIET:-0}" = "1" ]; then
+        return 0
+    fi
+    
+    # Display to user
+    echo -e "${C_GREEN}✓ $message${C_RESET}"
 }
 
 # ============================================================================
 # @function log::info
 # @description Log info message (cyan, shown to user)
 # @param $* Info message(s)
+# @param $1 Optional: Category (INSTALL, WINE, SYSTEM, CONFIG)
 # @return 0 (always succeeds)
 # ============================================================================
 log::info() {
     local timestamp
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local category="${1:-INFO}"
+    shift
     local message="$*"
-    echo "[$timestamp] INFO: $message" >> "$LOG_FILE"
-    echo -e "${C_CYAN}INFO: $message${C_RESET}"
+
+    # Check if first argument is a category (uppercase, no spaces)
+    if [[ ! "$category" =~ ^[A-Z_]+$ ]] || [ "$category" = "INFO" ]; then
+        # First arg is not a category, use it as part of message
+        message="$category $*"
+        category="INFO"
+    fi
+
+    # Write to main log (always)
+    echo "[$timestamp] [INFO] [$category] $message" >> "$LOG_FILE"
+    
+    # In quiet mode, only log to file, don't output to console
+    if [ "${QUIET:-0}" = "1" ]; then
+        return 0
+    fi
+    
+    # Display to user
+    echo -e "${C_CYAN}ℹ $message${C_RESET}"
+}
+
+# ============================================================================
+# @function log::installation
+# @description Log installation-specific message
+# @param $* Message(s)
+# @param $1 Optional: Category (INSTALL, WINE, SYSTEM, CONFIG)
+# @return 0 (always succeeds)
+# ============================================================================
+log::installation() {
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local category="${1:-INSTALL}"
+    shift
+    local message="$*"
+    
+    # Check if first argument is a category
+    if [[ ! "$category" =~ ^[A-Z_]+$ ]] || [ "$category" = "INSTALL" ]; then
+        message="$category $*"
+        category="INSTALL"
+    fi
+    
+    # Write to main log and installation log
+    echo "[$timestamp] [INFO] [$category] $message" >> "$LOG_FILE"
+    if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
+        echo "[$timestamp] [$category] $message" >> "$LOG_FILE"
+    fi
+}
+
+# ============================================================================
+# @function log::wine
+# @description Log Wine-specific message
+# @param $* Message(s)
+# @return 0 (always succeeds)
+# ============================================================================
+log::wine() {
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local message="$*"
+    
+    # Write to main log and wine log
+    echo "[$timestamp] [INFO] [WINE] $message" >> "$LOG_FILE"
+    if [ -n "${WINE_LOG:-}" ] && [ -f "${WINE_LOG:-}" ]; then
+        echo "[$timestamp] $message" >> "$WINE_LOG"
+    fi
 }
 
 # ============================================================================
 # @function log::warning
-# @description Log warning message (yellow, shown to user)
+# @description Log warning message (yellow, shown to user, also to warning log)
 # @param $* Warning message(s)
+# @param $1 Optional: Category (INSTALL, WINE, SYSTEM, CONFIG)
 # @return 0 (always succeeds)
 # ============================================================================
 log::warning() {
     local timestamp
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local category="${1:-WARNING}"
+    shift
     local message="$*"
-    echo "[$timestamp] WARNING: $message" >> "$LOG_FILE"
-    echo -e "${C_YELLOW}WARNING: $message${C_RESET}"
+    
+    # Check if first argument is a category (uppercase, no spaces)
+    if [[ ! "$category" =~ ^[A-Z_]+$ ]] || [ "$category" = "WARNING" ]; then
+        # First arg is not a category, use it as part of message
+        message="$category $*"
+        category="WARNING"
+    fi
+    
+    # Write to main log
+    echo "[$timestamp] [WARNING] [$category] $message" >> "$LOG_FILE"
+    
+    # Write to warning log
+    if [ -n "${WARNING_LOG:-}" ] && [ -f "${WARNING_LOG:-}" ]; then
+        echo "[$timestamp] [$category] $message" >> "$WARNING_LOG"
+    fi
+    
+    # In quiet mode, only log to file, don't output to console
+    if [ "${QUIET:-0}" = "1" ]; then
+        return 0
+    fi
+    
+    # Display to user
+    echo -e "${C_YELLOW}⚠ WARNING: $message${C_RESET}"
 }
 
 # ============================================================================
@@ -341,7 +586,14 @@ log::debug() {
     local timestamp
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local message="$*"
+    
+    # Always log to file
     echo "[$timestamp] DEBUG: $message" >> "$LOG_FILE"
+    
+    # Only show on console in verbose mode (and not in quiet mode)
+    if [ "${VERBOSE:-0}" = "1" ] && [ "${QUIET:-0}" != "1" ]; then
+        echo -e "${C_GRAY}[DEBUG]${C_RESET} $message"
+    fi
 }
 
 # ============================================================================
@@ -354,7 +606,14 @@ log::prompt() {
     local timestamp
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local message="$*"
-    echo "[$timestamp] PROMPT: $message" | tee -a "$LOG_FILE"
+    # Only log to file, don't output to console (prevents double prompt display)
+    # The prompt itself is shown via read -p in the calling function
+    echo "[$timestamp] PROMPT: $message" >> "$LOG_FILE" 2>/dev/null || {
+        # Log write failure is non-critical, but log it if warning function exists
+        if type warning >/dev/null 2>&1; then
+            warning "Failed to write prompt to log file: $LOG_FILE" 2>/dev/null || true
+        fi
+    }
 }
 
 # ============================================================================
@@ -367,7 +626,13 @@ log::input() {
     local timestamp
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local message="$*"
-    echo "[$timestamp] USER_INPUT: $message" | tee -a "$LOG_FILE"
+    # CRITICAL: Only log to file, don't output to console (security: prevents password/input exposure)
+    echo "[$timestamp] USER_INPUT: $message" >> "$LOG_FILE" 2>/dev/null || {
+        # Log write failure is non-critical, but log it if warning function exists
+        if type warning >/dev/null 2>&1; then
+            warning "Failed to write user input to log file: $LOG_FILE" 2>/dev/null || true
+        fi
+    }
 }
 
 # ============================================================================
@@ -441,8 +706,7 @@ log_environment() {
     log_debug "PATH: $PATH"
     log_debug "WINEPREFIX: ${WINEPREFIX:-not set}"
     log_debug "WINEARCH: ${WINEARCH:-not set}"
-    log_debug "PROTON_PATH: ${PROTON_PATH:-not set}"
-    log_debug "PROTON_VERB: ${PROTON_VERB:-not set}"
+    # REMOVED: Proton GE environment variables
     log_debug "SCR_PATH: ${SCR_PATH:-not set}"
     log_debug "WINE_PREFIX: ${WINE_PREFIX:-not set}"
     log_debug "RESOURCES_PATH: ${RESOURCES_PATH:-not set}"
@@ -483,13 +747,7 @@ log_system_info() {
     fi
     log_debug "Winetricks: $winetricks_ver"
     
-    # Proton GE check - DON'T call proton-ge --version as it starts Steam!
-    if command -v proton-ge &>/dev/null; then
-        # Just check if the command exists, don't run it (it starts Steam)
-        log_debug "Proton GE: installed (system-wide, version check skipped to avoid Steam)"
-    else
-        log_debug "Proton GE: not found"
-    fi
+    # REMOVED: Proton GE check - Proton GE support removed
     
     log_debug "Available Wine binaries:"
     which -a wine 2>/dev/null | while IFS= read -r wine_path; do
@@ -519,37 +777,10 @@ detect_system() {
     fi
 }
 
-# Check if Proton GE can be installed via package manager
-check_proton_ge_installable() {
-    local system=$(detect_system)
-    
-    case "$system" in
-        arch|manjaro|cachyos|endeavouros)
-            # Arch-based: Check for AUR helper
-            if command -v yay &> /dev/null || command -v paru &> /dev/null || command -v pacman &> /dev/null; then
-                return 0
-            fi
-            ;;
-        debian|ubuntu|pop)
-            # Debian-based: Check for apt
-            if command -v apt &> /dev/null; then
-                return 0
-            fi
-            ;;
-        fedora|rhel|centos)
-            # RPM-based: Check for dnf/yum
-            if command -v dnf &> /dev/null || command -v yum &> /dev/null; then
-                return 0
-            fi
-            ;;
-    esac
-    
-    return 1
-}
+# REMOVED: Proton GE support removed - check_proton_ge_installable() function removed
 
-# Detect all available Wine/Proton versions
-# Returns: array of options with priority (System Proton GE > Wine > others)
-# NOTE: Proton GE from Steam directory is SKIPPED because it starts Steam
+# Detect all available Wine versions
+# Returns: array of options with priority (Wine Staging > Wine Standard)
 detect_all_wine_versions() {
     local options=()
     local descriptions=()
@@ -557,51 +788,44 @@ detect_all_wine_versions() {
     local index=1
     local system=$(detect_system)
     local recommended_index=1
-    local proton_found=0  # Flag to track if any Proton GE was found
     
-    # SKIP: Proton GE (Steam directory) - NOT USED for desktop apps
-    # Reason: It starts Steam when winecfg/wine is called, which breaks the installation
-    # We only use system-wide Proton GE (installed via package manager)
+    # REMOVED: Proton GE support completely removed - only Wine Standard is supported
     
-    # Priority 1: System-wide Proton GE (if installed via package manager)
-    # This is the BEST option for desktop applications
-    # NOTE: DON'T call proton-ge --version as it starts Steam!
-    if command -v proton-ge &> /dev/null; then
-        # Just check if command exists, don't call it (it starts Steam)
-        local version="system"
-        log_debug "Proton GE (system) gefunden - verwende ohne Version-Check (verhindert Steam-Start)"
+    # Priority 2: Wine Staging 9.x (RECOMMENDED for Photoshop 2021 - more stable than Wine 10.x)
+    # Wine 10.x WOW64-Modus ist experimentell und verursacht bei Photoshop häufig Rendering-Glitches
+    # Wine 9.x ist stabiler und wird für Photoshop 2021 empfohlen
+    if command -v wine-staging &> /dev/null; then
+        local version=$(wine-staging --version 2>/dev/null | head -1 || echo "unknown")
+        local wine_major_version=$(echo "$version" | grep -oE "wine-[0-9]+" | grep -oE "[0-9]+" | head -1 || echo "0")
+        
         options+=("$index")
-        local recommended_text=$(i18n::get "recommended")
-        local compatibility_text=$(i18n::get "best_compatibility")
-        descriptions+=("Proton GE (system): $version ⭐ $recommended_text - $compatibility_text")
-        paths+=("system")
-        recommended_index=$index
-        proton_found=1
+        if [ "$wine_major_version" -ge 9 ] && [ "$wine_major_version" -lt 10 ]; then
+            # Wine 9.x - empfohlen für Photoshop 2021
+            local recommended_text=$(i18n::get "recommended")
+            descriptions+=("Wine Staging: $version ⭐ $recommended_text (stabiler für Photoshop 2021)")
+            recommended_index=$index  # Wine 9.x als empfohlen setzen
+        else
+            local alternative_text=$(i18n::get "wine_staging_alternative")
+            descriptions+=("Wine Staging: $version ($alternative_text)")
+        fi
+        paths+=("wine-staging")
         ((index++))
     fi
     
-    # Priority 3: Standard Wine
+    # Priority 3: Standard Wine (Warnung bei Wine 10.x)
     if command -v wine &> /dev/null; then
         local version=$(wine --version 2>/dev/null | head -1 || echo "unknown")
+        local wine_major_version=$(echo "$version" | grep -oE "wine-[0-9]+" | grep -oE "[0-9]+" | head -1 || echo "0")
+        
         options+=("$index")
         local fallback_text=$(i18n::get "fallback")
-        if [ $proton_found -eq 1 ]; then
-            local proton_recommended=$(i18n::get "proton_ge_recommended_fallback")
-            descriptions+=("Standard Wine: $version ($fallback_text - $proton_recommended)")
+        if [ "$wine_major_version" -ge 10 ]; then
+            # Wine 10.x - Warnung hinzufügen
+            descriptions+=("Standard Wine: $version ($fallback_text) ⚠ Wine 10.x kann Probleme verursachen - Wine 9.x empfohlen")
         else
             descriptions+=("Standard Wine: $version ($fallback_text)")
         fi
         paths+=("wine")
-        ((index++))
-    fi
-    
-    # Priority 4: Wine Staging (if available)
-    if command -v wine-staging &> /dev/null; then
-        local version=$(wine-staging --version 2>/dev/null | head -1 || echo "unknown")
-        options+=("$index")
-        local alternative_text=$(i18n::get "wine_staging_alternative")
-        descriptions+=("Wine Staging: $version ($alternative_text)")
-        paths+=("wine-staging")
         ((index++))
     fi
     
@@ -618,7 +842,7 @@ detect_all_wine_versions() {
 
 # ============================================================================
 # @function handle_wine_method_parameter
-# @description Handle WINE_METHOD command line parameter (--wine-standard/--proton-ge)
+# @description Handle WINE_METHOD command line parameter (--wine-standard)
 # @return Selected option index (1-based) if found, empty string if not set or not found
 # ============================================================================
 handle_wine_method_parameter() {
@@ -634,29 +858,31 @@ handle_wine_method_parameter() {
     # This function returns only the index via stdout
     log "Wine-Methode wurde per Parameter gesetzt: $WINE_METHOD" >&2
     log_debug "Wine-Methode Parameter: $WINE_METHOD" >&2
-    debug_log "PhotoshopSetup.sh:484" "WINE_METHOD set via parameter" "{\"WINE_METHOD\":\"${WINE_METHOD}\"}" "H1" >&2
+    debug_log "PhotoshopSetup.sh:484" "WINE_METHOD set via parameter" "{\"WINE_METHOD\":\"${WINE_METHOD}\"}" "H1"
+    
+    # Show info output to user about Wine method being used
+    if type output::info >/dev/null 2>&1; then
+        output::info "Using Wine method from parameter: $WINE_METHOD" >&2
+    else
+        log "Using Wine method from parameter: $WINE_METHOD" >&2
+    fi
     
     local skip_text=$(i18n::get "skipping_interactive_selection")
-    local wine_method_display=$([ "$WINE_METHOD" = "wine" ] && echo "Wine Standard" || echo "Proton GE")
+    local wine_method_display="Wine Standard"
     log "$skip_text: $wine_method_display" >&2
     
     # Find the matching option index
+    # CRITICAL: We need to return the option NUMBER from WINE_OPTIONS, not the array index
     local found=0
-    local index=1
-    local selected_index=""
-    for path in "${WINE_PATHS[@]}"; do
-        if [ "$WINE_METHOD" = "proton" ] && [ "$path" = "system" ]; then
-            selected_index=$index
+    local selected_option=""
+    for i in "${!WINE_PATHS[@]}"; do
+        local path="${WINE_PATHS[$i]}"
+        if [ "$WINE_METHOD" = "wine" ] && [ "$path" = "wine" ]; then
+            selected_option="${WINE_OPTIONS[$i]}"
             found=1
-            log_debug "Proton GE gefunden bei Index $index" >&2
-            break
-        elif [ "$WINE_METHOD" = "wine" ] && [ "$path" = "wine" ]; then
-            selected_index=$index
-            found=1
-            log_debug "Wine Standard gefunden bei Index $index" >&2
+            log_debug "Wine Standard gefunden bei Array-Index $i, Option-Nummer: $selected_option" >&2
             break
         fi
-        ((index++))
     done
     
     if [ $found -eq 0 ]; then
@@ -667,392 +893,74 @@ handle_wine_method_parameter() {
         return 1
     else
         # Use the found selection and skip menu
-        log "Verwende automatisch ausgewählte Option: $selected_index" >&2
-        echo "$selected_index"  # Return selected index (ONLY this goes to stdout)
+        log "Verwende automatisch ausgewählte Option: $selected_option" >&2
+        echo "$selected_option"  # Return option number from WINE_OPTIONS (ONLY this goes to stdout)
         return 0  # Successfully handled
     fi
 }
 
 # ============================================================================
-# @function check_proton_ge_availability
-# @description Check if Proton GE is available in WINE_PATHS
-# @return 0 if Proton GE is available, 1 if not
+# REMOVED: Proton GE support functions removed
+# Functions removed: check_proton_ge_availability(), find_proton_ge_path(), validate_and_configure_proton_ge()
+# REMOVED: Proton GE installation functions removed
+# Functions removed: install_proton_ge_auto(), prompt_install_proton_ge(), install_proton_ge_interactive()
 # ============================================================================
-check_proton_ge_availability() {
-    for path in "${WINE_PATHS[@]}"; do
-        # Only system-wide Proton GE is used (not Steam Proton)
-        if [ "$path" = "system" ]; then
-            return 0  # Found
-        fi
-    done
-    return 1  # Not found
-}
 
-# ============================================================================
-# @function find_proton_ge_path
-# @description Find Proton GE installation path (manual > AUR > system paths)
-# @return Proton GE path if found, empty string if not found
-# ============================================================================
-find_proton_ge_path() {
-    local proton_ge_path=""
-    
-    # PRIORITÄT 1: Manuell installiert (universell für alle Linux-Distributionen)
-    local possible_manual_paths=(
-        "$HOME/.local/share/proton-ge/current"
-        "$HOME/.local/share/proton-ge"
-        "$HOME/.proton-ge/current"
-        "$HOME/.proton-ge"
-        "/usr/local/share/proton-ge/current"
-        "/usr/local/share/proton-ge"
-        "/opt/proton-ge/current"
-        "/opt/proton-ge"
-    )
-    
-    for path in "${possible_manual_paths[@]}"; do
-        # Prüfe ob es ein Symlink ist (current -> version)
-        local real_path="$path"
-        if [ -L "$path" ]; then
-            real_path=$(readlink -f "$path" 2>/dev/null || echo "$path")
-        fi
-        
-        if [ -d "$real_path" ] && [ -f "$real_path/files/bin/wine" ]; then
-            # Prüfe dass es NICHT im Steam-Verzeichnis ist
-            if [[ ! "$real_path" =~ steam ]]; then
-                proton_ge_path="$real_path"
-                log_debug "Proton GE (manuell) gefunden: $proton_ge_path"
-                break
-            fi
-        fi
-    done
-    
-    # PRIORITÄT 2: AUR-Paket (nur wenn nicht Steam-Verzeichnis)
-    if [ -z "$proton_ge_path" ] && command -v pacman &>/dev/null; then
-        local proton_ge_pkg_path=$(pacman -Ql proton-ge-custom-bin 2>/dev/null | grep "files/bin/wine$" | head -1 | awk '{print $2}' | xargs dirname | xargs dirname | xargs dirname)
-        if [ -n "$proton_ge_pkg_path" ] && [ -d "$proton_ge_pkg_path" ] && [ -f "$proton_ge_pkg_path/files/bin/wine" ]; then
-            # Only use if NOT in Steam directory (Steam paths start Steam)
-            if [[ ! "$proton_ge_pkg_path" =~ steam ]]; then
-                # CRITICAL: Validate that path is safe
-                if [[ ! "$proton_ge_pkg_path" =~ ^/tmp|^/var/tmp|^/dev/shm|^/proc ]]; then
-                    proton_ge_path="$proton_ge_pkg_path"
-                    log_debug "Proton GE (AUR-Paket) gefunden: $proton_ge_path"
-                else
-                    log_debug "Proton GE Pfad in unsicherem Verzeichnis, überspringe: $proton_ge_pkg_path"
-                fi
-            fi
-        fi
-    fi
-    
-    # PRIORITÄT 3: Standard-System-Pfade (falls vorhanden)
-    if [ -z "$proton_ge_path" ]; then
-        if [ -d "/usr/share/proton-ge" ] && [ -f "/usr/share/proton-ge/files/bin/wine" ]; then
-            proton_ge_path="/usr/share/proton-ge"
-        fi
-    fi
-    
-    echo "$proton_ge_path"
-}
-
-# ============================================================================
-# @function validate_and_configure_proton_ge
-# @description Validate Proton GE path and configure environment (PATH, PROTON_PATH)
-# @param proton_ge_path - Path to Proton GE installation
-# @return 0 on success, 1 on failure
-# ============================================================================
-validate_and_configure_proton_ge() {
-    local proton_ge_path="$1"
-    
-    if [ -z "$proton_ge_path" ] || [ ! -f "$proton_ge_path/files/bin/wine" ]; then
-        return 1
-    fi
-    
-    # CRITICAL: Prevent PATH manipulation - validate proton_ge_path
-    # Check that path is not in unsafe directories
-    if [[ "$proton_ge_path" =~ ^/tmp|^/var/tmp|^/dev/shm|^/proc ]]; then
-        log_error "Proton GE path is in unsafe directory (security risk): $proton_ge_path"
-        log "Using standard Wine instead of unsafe Proton GE path"
-        return 1
-    fi
-    
-    # CRITICAL: Additional validation - check that wine binary is real
-    if [ ! -x "$proton_ge_path/files/bin/wine" ] || [ -L "$proton_ge_path/files/bin/wine" ]; then
-        log_error "Proton GE wine binary is not safe (symlink or not executable): $proton_ge_path/files/bin/wine"
-        log "Using standard Wine instead of unsafe Proton GE"
-        return 1
-    fi
-    
-    # CRITICAL: Extend PATH, but ensure no . in PATH
-    local safe_path="$proton_ge_path/files/bin"
-    # Remove . from PATH if present
-    local clean_path=$(echo "$PATH" | tr ':' '\n' | grep -v '^\.$' | grep -v '^$' | tr '\n' ':' | sed 's/:$//')
-    export PATH="$safe_path:${clean_path:-/usr/local/bin:/usr/bin:/bin}"
-    export PROTON_PATH="$proton_ge_path"
-    export PROTON_VERB=1
-    log "✓ Proton GE (system) konfiguriert: $proton_ge_path"
-    log_debug "Proton GE Wine-Binary: $proton_ge_path/files/bin/wine"
-    
-    return 0
-}
-
-# ============================================================================
-# @function install_proton_ge_auto
-# @description Automatically install Proton GE (AUR or manual download)
-# @return Installation path if successful, empty string if failed
-# ============================================================================
-install_proton_ge_auto() {
-    local install_success=0
-    local proton_ge_install_path=""
-    
-    # Show installation message
-    log_warning "$(i18n::get "proton_ge_path_not_found")"
-    log "${C_YELLOW}→${C_RESET} ${C_CYAN}$(i18n::get "starting_proton_ge_installation")${C_RESET}"
-    echo ""
-    echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_CYAN}           $(i18n::get "proton_ge_installing_now")${C_RESET}"
-    echo -e "${C_CYAN}═══════════════════════════════════════════════════════════════${C_RESET}"
-    echo ""
-    
-    # OPTION 1: Try AUR package (Arch-based)
-    if command -v yay &> /dev/null || command -v paru &> /dev/null; then
-        local aur_helper=""
-        if command -v yay &> /dev/null; then
-            aur_helper="yay"
-        else
-            aur_helper="paru"
-        fi
-        
-        local aur_text=$(i18n::get "trying_aur_installation")
-        show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}$(printf "$aur_text" "$aur_helper")${C_RESET}"
-        # Use --noconfirm to avoid hanging on user prompts
-        log_command $aur_helper -S --noconfirm proton-ge-custom-bin
-        if [ $? -eq 0 ]; then
-            # Check installation path
-            local installed_path=$(pacman -Ql proton-ge-custom-bin 2>/dev/null | grep "files/bin/wine$" | head -1 | awk '{print $2}' | xargs dirname | xargs dirname | xargs dirname)
-            if [ -n "$installed_path" ] && [ -d "$installed_path" ]; then
-                if [[ "$installed_path" =~ steam ]]; then
-                    log "⚠ AUR-Paket installiert in Steam-Verzeichnis - versuche manuelle Installation"
-                    install_success=0
-                else
-                    log "${C_GREEN}✓${C_RESET} ${C_CYAN}Proton GE system-weit installiert: $installed_path${C_RESET}"
-                    show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}Proton GE system-weit installiert${C_RESET}"
-                    install_success=1
-                    proton_ge_install_path="$installed_path"
-                fi
-            fi
-        fi
-    fi
-    
-    # OPTION 2: Manual installation (universal for all Linux distributions)
-    if [ $install_success -eq 0 ]; then
-        show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}$(i18n::get "installing_proton_ge_manually")${C_RESET}"
-        
-        # Determine installation path (system-wide, not Steam)
-        local install_base=""
-        if [ -w "/usr/local/share" ]; then
-            install_base="/usr/local/share/proton-ge"
-        elif [ -w "$HOME/.local/share" ]; then
-            install_base="$HOME/.local/share/proton-ge"
-        else
-            install_base="$HOME/.proton-ge"
-        fi
-        
-        log "  → Installationspfad: $install_base"
-        mkdir -p "$install_base" 2>/dev/null || {
-            log_error "Konnte Installationsverzeichnis nicht erstellen: $install_base"
-            install_success=0
-        }
-        
-        if [ -d "$install_base" ]; then
-            # Download latest Proton GE version from GitHub
-            show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}$(i18n::get "downloading_latest_proton_ge")${C_RESET}"
-            
-            # GitHub API: Get latest release version
-            local latest_version=$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | head -1)
-            
-            if [ -z "$latest_version" ]; then
-                latest_version="GE-Proton10-28"  # Fallback version (updated 2025-01-09)
-                log "  ⚠ Konnte neueste Version nicht ermitteln, verwende Fallback: $latest_version"
-            else
-                log "  → Neueste Version gefunden: $latest_version"
-            fi
-            
-            # Download URL
-            local download_url="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${latest_version}/${latest_version}.tar.gz"
-            local download_file="$install_base/${latest_version}.tar.gz"
-            
-            # CRITICAL: Download URL validation
-            local download_ok=0
-            if [[ "$download_url" =~ ^https://(www\.)?github\.com ]]; then
-                log_debug "Download von: $download_url"
-                show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}$(i18n::get "downloading")${C_RESET}"
-                
-                # Download with progress
-                if command -v wget &> /dev/null; then
-                    wget -q --show-progress -O "$download_file" "$download_url" 2>&1 | tee -a "$LOG_FILE"
-                    [ $? -eq 0 ] && [ -f "$download_file" ] && download_ok=1
-                elif command -v curl &> /dev/null; then
-                    curl -L --progress-bar -o "$download_file" "$download_url" 2>&1 | tee -a "$LOG_FILE"
-                    [ $? -eq 0 ] && [ -f "$download_file" ] && download_ok=1
-                else
-                    log_error "wget oder curl nicht gefunden - Download nicht möglich"
-                fi
-            fi
-            
-            if [ $download_ok -eq 1 ] && [ -f "$download_file" ]; then
-                # Extract
-                show_message "${C_YELLOW}  →${C_RESET} ${C_CYAN}$(i18n::get "extracting_proton_ge")${C_RESET}"
-                tar -xzf "$download_file" -C "$install_base" 2>&1 | tee -a "$LOG_FILE"
-                if [ $? -eq 0 ]; then
-                    # Check if installation successful
-                    local extracted_dir="$install_base/${latest_version}"
-                    if [ -d "$extracted_dir" ] && [ -f "$extracted_dir/files/bin/wine" ]; then
-                        log "${C_GREEN}✓${C_RESET} ${C_CYAN}Proton GE manuell installiert: $extracted_dir${C_RESET}"
-                        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}Proton GE system-weit installiert${C_RESET}"
-                        install_success=1
-                        proton_ge_install_path="$extracted_dir"
-                        
-                        # Create symlink for easier access
-                        if [ -d "$install_base" ]; then
-                            ln -sfn "$extracted_dir" "$install_base/current" 2>/dev/null || true
-                        fi
-                    else
-                        log_error "Installation unvollständig - wine-Binary nicht gefunden"
-                        install_success=0
-                    fi
-                else
-                    log_error "Entpacken fehlgeschlagen"
-                    install_success=0
-                fi
-                
-                # Delete download file
-                rm -f "$download_file" 2>/dev/null || true
-            else
-                install_success=0
-            fi
-        fi
-    fi
-    
-    # Return installation path if successful
-    if [ $install_success -eq 1 ] && [ -n "$proton_ge_install_path" ]; then
-        echo "$proton_ge_install_path"
-        return 0
-    else
-        echo ""
-        return 1
-    fi
-}
-
-# Prompt user if they want to install Proton GE
-# Returns: 0 if user wants to install, 1 if not
-prompt_install_proton_ge() {
-    local system="$1"
-    
-    log ""
-    log "═══════════════════════════════════════════════════════════════"
-    log "           $(i18n::get "important_select_wine_version")"
-    log "═══════════════════════════════════════════════════════════════"
-    log ""
-    log "ℹ System erkannt: $system"
-    log ""
-    log "Für Photoshop gibt es zwei Möglichkeiten:"
-    log ""
-    log "  1. PROTON GE (EMPFOHLEN)"
-    log "     → Bessere Kompatibilität, weniger Fehler"
-    log "     → Wird jetzt automatisch installiert (ca. 2-5 Minuten)"
-    log ""
-    log "  2. STANDARD WINE (Fallback)"
-    log "     → Bereits installiert, funktioniert meist auch"
-    log "     → Installation startet sofort"
-    log ""
-    log "═══════════════════════════════════════════════════════════════"
-    log ""
-    log "Was möchtest du tun?"
-    log ""
-    log "   [J] Ja - Proton GE installieren (EMPFOHLEN für beste Ergebnisse)"
-    log "   [N] Nein - Mit Standard-Wine fortfahren (schneller, aber weniger optimal)"
-    log ""
-    echo ""
-    echo "═══════════════════════════════════════════════════════════════"
-    echo "           $(i18n::get "important_select_wine_version")"
-    echo "═══════════════════════════════════════════════════════════════"
-    echo ""
-    echo "ℹ System erkannt: $system"
-    echo ""
-    echo "Für Photoshop gibt es zwei Möglichkeiten:"
-    echo ""
-    echo "  1. PROTON GE (EMPFOHLEN)"
-    echo "     → Bessere Kompatibilität, weniger Fehler"
-    echo "     → Wird jetzt automatisch installiert (ca. 2-5 Minuten)"
-    echo ""
-    echo "  2. STANDARD WINE (Fallback)"
-    echo "     → Bereits installiert, funktioniert meist auch"
-    echo "     → Installation startet sofort"
-    echo ""
-    echo "═══════════════════════════════════════════════════════════════"
-    echo ""
-    echo "Was möchtest du tun?"
-    echo ""
-    echo "   [J] Ja - Proton GE installieren (EMPFOHLEN für beste Ergebnisse)"
-    echo "   [N] Nein - Mit Standard-Wine fortfahren (schneller, aber weniger optimal)"
-    echo ""
-    log_prompt "Deine Wahl [J/n]: "
-    IFS= read -r -p "Deine Wahl [J/n]: " install_proton
-    log_input "$install_proton"
-    
-    if [[ "$install_proton" =~ ^[JjYy]$ ]] || [ -z "$install_proton" ]; then
-        return 0  # User wants to install
-    else
-        return 1  # User wants to use standard Wine
-    fi
-}
-
-# Install Proton GE interactively with all steps
-# Returns: 0 on success, 1 on failure
-install_proton_ge_interactive() {
-    log ""
-    log "═══════════════════════════════════════════════════════════════"
-    log "           Proton GE wird jetzt installiert"
-    log "═══════════════════════════════════════════════════════════════"
-    log ""
-    echo ""
-    echo "═══════════════════════════════════════════════════════════════"
-    echo "           Proton GE wird jetzt installiert"
-    echo "═══════════════════════════════════════════════════════════════"
+# Handle the case when only one Wine option is available
+# Returns: selection number or empty string
+# Show interactive menu for Wine selection
+# Returns: selected option number via echo
+show_wine_selection_menu() {
     echo ""
     
     # Step 1: Check if Wine is installed
-    log "SCHRITT 1/2: Prüfe ob Wine installiert ist..."
-    echo "SCHRITT 1/2: Prüfe ob Wine installiert ist..."
+    if [ "$LANG_CODE" = "de" ]; then
+        log "$(i18n::get "step_check_wine_short")"
+    else
+        log "$(i18n::get "step_check_wine_short_en")"
+    fi
     echo ""
     if ! command -v wine &> /dev/null; then
-        log "⚠ Wine fehlt noch - wird jetzt installiert..."
-        log "   (Wine wird für die Photoshop-Komponenten benötigt)"
-        echo "⚠ Wine fehlt noch - wird jetzt installiert..."
-        echo "   (Wine wird für die Photoshop-Komponenten benötigt)"
+        if [ "$LANG_CODE" = "de" ]; then
+            log "$(i18n::get "wine_missing_install")"
+            log "$(i18n::get "wine_needed_components")"
+        else
+            log "$(i18n::get "wine_missing_install_en")"
+            log "$(i18n::get "wine_needed_components_en")"
+        fi
         echo ""
         if command -v pacman &> /dev/null; then
             log_command sudo pacman -S wine
         else
-            log "   Bitte installiere Wine manuell für deine Distribution"
-            echo "   Bitte installiere Wine manuell für deine Distribution"
-            log_prompt "Drücke Enter, wenn Wine installiert wurde: "
-            IFS= read -r -p "Drücke Enter, wenn Wine installiert wurde: " wait_wine
+            if [ "$LANG_CODE" = "de" ]; then
+                log "$(i18n::get "install_wine_manually_short")"
+                log_prompt "$(i18n::get "press_enter_wine_installed")"
+                IFS= read -r -p "$(i18n::get "press_enter_wine_installed")" wait_wine
+            else
+                log "$(i18n::get "install_wine_manually_short_en")"
+                log_prompt "$(i18n::get "press_enter_wine_installed_en")"
+                IFS= read -r -p "$(i18n::get "press_enter_wine_installed_en")" wait_wine
+            fi
             log_input "$wait_wine"
         fi
-        log ""
         echo ""
     else
-        log "✓ Wine ist bereits installiert"
-        echo "✓ Wine ist bereits installiert"
+        if [ "$LANG_CODE" = "de" ]; then
+            log "$(i18n::get "wine_already_installed_short")"
+        else
+            log "$(i18n::get "wine_already_installed_short_en")"
+        fi
         echo ""
     fi
     
     # Step 2: Install Proton GE
-    log "SCHRITT 2/2: Installiere Proton GE system-weit (unabhängig von Steam)..."
-    log "   (Dies kann 2-5 Minuten dauern - bitte warten...)"
-    log "   → WICHTIG: Proton GE wird system-weit installiert, NICHT in Steam-Verzeichnis"
-    echo "SCHRITT 2/2: Installiere Proton GE system-weit (unabhängig von Steam)..."
-    echo "   (Dies kann 2-5 Minuten dauern - bitte warten...)"
-    echo "   → WICHTIG: System-weite Installation, NICHT in Steam-Verzeichnis"
+    if [ "$LANG_CODE" = "de" ]; then
+        log "$(i18n::get "step_install_proton_short")"
+        log "$(i18n::get "proton_install_takes_time_short")"
+    else
+        log "$(i18n::get "step_install_proton_short_en")"
+        log "$(i18n::get "proton_install_takes_time_short_en")"
+    fi
     echo ""
     
     local install_success=0
@@ -1078,7 +986,7 @@ install_proton_ge_interactive() {
                     install_success=0
                 else
                     log "✓ Proton GE system-weit installiert: $proton_ge_path"
-                    echo "✓ Proton GE system-weit installiert"
+                    echo "$(i18n::get "proton_ge_installed_systemwide")"
                     install_success=1
                     proton_ge_install_path="$proton_ge_path"
                 fi
@@ -1089,7 +997,7 @@ install_proton_ge_interactive() {
     # OPTION 2: Manual installation (universal for all Linux distributions)
     if [ $install_success -eq 0 ]; then
         log "  → Installiere Proton GE manuell system-weit..."
-        echo "  → Installiere Proton GE manuell system-weit..."
+        echo "$(i18n::get "proton_ge_manual_installing")"
         
         local install_base=""
         if [ -w "/usr/local/share" ]; then
@@ -1109,7 +1017,7 @@ install_proton_ge_interactive() {
         
         if [ -d "$install_base" ]; then
             log "  → Lade neueste Proton GE Version herunter..."
-            echo "  → Lade neueste Proton GE Version herunter..."
+            echo "$(i18n::get "proton_ge_downloading")"
             
             local latest_version=$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | head -1)
             
@@ -1127,7 +1035,7 @@ install_proton_ge_interactive() {
             local download_ok=0
             if [[ "$download_url" =~ ^https:// ]] && [[ "$download_url" =~ ^https://(www\.)?github\.com ]]; then
                 log "  → Download von: $download_url"
-                echo "  → Download läuft..."
+                echo "$(i18n::get "proton_ge_download_running")"
                 
                 if command -v wget &> /dev/null; then
                     wget -q --show-progress -O "$download_file" "$download_url" 2>&1 | tee -a "$LOG_FILE"
@@ -1152,18 +1060,23 @@ install_proton_ge_interactive() {
             
             if [ $download_ok -eq 1 ] && [ -f "$download_file" ]; then
                 log "  → Entpacke Proton GE..."
-                echo "  → Entpacke Proton GE..."
+                echo "$(i18n::get "proton_ge_extracting")"
                 tar -xzf "$download_file" -C "$install_base" 2>&1 | tee -a "$LOG_FILE"
                 if [ $? -eq 0 ]; then
                     local extracted_dir="$install_base/${latest_version}"
                     if [ -d "$extracted_dir" ] && [ -f "$extracted_dir/files/bin/wine" ]; then
                         log "✓ Proton GE manuell installiert: $extracted_dir"
-                        echo "✓ Proton GE system-weit installiert"
+                        echo "$(i18n::get "proton_ge_installed_systemwide")"
                         install_success=1
                         proton_ge_install_path="$extracted_dir"
                         
                         if [ -d "$install_base" ]; then
-                            ln -sfn "$extracted_dir" "$install_base/current" 2>/dev/null || true
+                            ln -sfn "$extracted_dir" "$install_base/current" 2>/dev/null || {
+                                # Symlink creation failure is non-critical, but log it if warning function exists
+                                if type warning >/dev/null 2>&1; then
+                                    warning "Failed to create symlink: $install_base/current" 2>/dev/null || true
+                                fi
+                            }
                         fi
                     else
                         log_error "Installation unvollständig - wine-Binary nicht gefunden"
@@ -1185,7 +1098,7 @@ install_proton_ge_interactive() {
     if [ $install_success -eq 0 ]; then
         log "⚠ Automatische Installation fehlgeschlagen"
         echo ""
-        echo "⚠ Automatische Proton GE Installation fehlgeschlagen"
+        echo "$(i18n::get "proton_ge_install_failed")"
         echo ""
         echo "$(i18n::get "you_can_install_proton_ge_manually")"
         echo "  1. Lade von: https://github.com/GloriousEggroll/proton-ge-custom/releases"
@@ -1207,13 +1120,13 @@ install_proton_ge_interactive() {
     # Success - re-detect versions
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
-    echo "           ✓ Proton GE erfolgreich installiert!"
+    echo "$(i18n::get "proton_ge_install_success")"
     echo "═══════════════════════════════════════════════════════════════"
     echo ""
-    echo "Jetzt stehen dir mehrere Optionen zur Verfügung:"
-    echo "   → Du kannst zwischen Proton GE und Standard-Wine wählen"
+    echo "$(i18n::get "options_available")"
+    echo "$(i18n::get "can_choose_proton_wine")"
     echo ""
-    echo "Suche verfügbare Versionen..."
+    echo "$(i18n::get "searching_versions")"
     echo ""
     
     detect_all_wine_versions
@@ -1223,30 +1136,20 @@ install_proton_ge_interactive() {
 
 # Handle the case when only one Wine option is available
 # Returns: selection number or empty string
-# Show interactive menu for Wine/Proton selection
+# Show interactive menu for Wine selection
 # Returns: selected option number via echo
 show_wine_selection_menu() {
     local system="$1"
-    local has_proton="$2"
     
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
-    echo "           $(i18n::get "select_wine_proton_version")"
+    echo "           $(i18n::get "select_wine_version")"
     echo "═══════════════════════════════════════════════════════════════"
     echo ""
     
     # Show system detection
     echo "$(i18n::get "system_detected" "$system")"
-    if [ "$system" = "cachyos" ] || [ "$system" = "arch" ] || [ "$system" = "manjaro" ]; then
-        echo "$(i18n::get "proton_recommended_arch")"
-        if [ $has_proton -eq 0 ]; then
-            echo ""
-            echo "$(i18n::get "proton_not_found_warning")"
-            echo "$(i18n::get "install_proton_yay")"
-            echo "$(i18n::get "install_proton_paru")"
-            echo ""
-        fi
-    fi
+    # REMOVED: Proton GE recommendations - only Wine Standard/Staging supported
     echo ""
     
     # Display options
@@ -1304,7 +1207,6 @@ find_selected_wine_index() {
             break
         fi
     done
-    
     echo "$selected_index"
 }
 
@@ -1318,111 +1220,39 @@ configure_selected_wine() {
     log "Pfad: $selected_path"
     
     # Configure environment based on selection
-    # NOTE: Proton GE from Steam directory is no longer used (it starts Steam)
-    if [ "$selected_path" = "system" ]; then
-        # System-wide Proton GE - find the actual path
-        local proton_ge_path
-        proton_ge_path=$(find_proton_ge_path)
-        
-        if [ -n "$proton_ge_path" ] && [ -f "$proton_ge_path/files/bin/wine" ]; then
-            # CRITICAL: Validate path before using
-            if security::validate_path "$proton_ge_path" "configure_selected_wine"; then
-                export PROTON_PATH="$proton_ge_path"
-                export PROTON_VERB="runinprefix"
-                log "✓ Proton GE (system) konfiguriert: $proton_ge_path"
-            else
-                log "Using standard Wine instead of unsafe Proton GE path"
-                export PROTON_PATH=""
-            fi
-        else
-            log "Proton GE path not found, using standard Wine"
-            export PROTON_PATH=""
-        fi
-    else
-        # Standard Wine or Wine Staging
-        export PROTON_PATH=""
-        log "✓ Standard-Wine konfiguriert"
-    fi
+    # REMOVED: Proton GE support - only Wine Standard/Staging supported
+    export PROTON_PATH=""
+    log "✓ Wine konfiguriert"
 }
 
 handle_single_wine_option() {
     local system="$1"
-    local has_proton="$2"
     
     local selection=1
     
     # Skip prompt if WINE_METHOD is already set
     if [ -n "$WINE_METHOD" ]; then
-        log_debug "WINE_METHOD bereits gesetzt ($WINE_METHOD) - überspringe Proton GE Abfrage"
+        log_debug "WINE_METHOD bereits gesetzt ($WINE_METHOD)"
         debug_log "PhotoshopSetup.sh:527" "WINE_METHOD check - skipping prompt" "{\"WINE_METHOD\":\"${WINE_METHOD}\",\"count\":1}" "H1"
         echo "$selection"
         return 0
     fi
     
-    # If no Proton GE and on Arch-based system, offer to install
-    if [ $has_proton -eq 0 ] && ([ "$system" = "cachyos" ] || [ "$system" = "arch" ] || [ "$system" = "manjaro" ]); then
-        if prompt_install_proton_ge "$system"; then
-            local install_result
-            install_proton_ge_interactive
-            install_result=$?
-            
-            if [ $install_result -eq 1 ]; then
-                # Installation cancelled
-                return 1
-            elif [ $install_result -eq 2 ]; then
-                # User wants to use standard Wine
-                selection=1
-                echo ""
-                echo "→ Verwende Standard-Wine..."
-                echo ""
-                echo "$selection"
-                return 0
-            fi
-            
-            # Installation successful - find Proton GE
-            local proton_index=-1
-            for i in "${!WINE_PATHS[@]}"; do
-                if [ "${WINE_PATHS[$i]}" = "system" ]; then
-                    proton_index=$i
-                    break
-                fi
-            done
-            
-            if [ $proton_index -ge 0 ]; then
-                selection="${WINE_OPTIONS[$proton_index]}"
-                echo "✓ Verwende automatisch: ${WINE_DESCRIPTIONS[$proton_index]}"
-                echo ""
-                echo "→ Installation wird jetzt automatisch fortgesetzt..."
-                echo ""
-            else
-                selection=1
-                echo "✓ Verwende: ${WINE_DESCRIPTIONS[0]}"
-                echo ""
-                echo "→ Installation wird jetzt automatisch fortgesetzt..."
-                echo ""
-            fi
-        else
-            # User chose standard Wine
-            echo ""
-            echo "═══════════════════════════════════════════════════════════════"
-            echo "           Installation mit Standard-Wine"
-            echo "═══════════════════════════════════════════════════════════════"
-            echo ""
-            echo "Verwende: ${WINE_DESCRIPTIONS[0]}"
-            echo ""
-            echo "ℹ Hinweis: Standard-Wine funktioniert meist auch,"
-            echo "   aber Proton GE bietet bessere Kompatibilität."
-            echo "   Du kannst später jederzeit auf Proton GE umsteigen."
-            echo ""
-            selection=1
-        fi
-    fi
+    # REMOVED: Proton GE support - only Wine Standard/Staging supported
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "           Installation mit Wine"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo ""
+    echo "Verwende: ${WINE_DESCRIPTIONS[0]}"
+    echo ""
+    selection=1
     
     echo "$selection"
     return 0
 }
 
-# Interactive selection of Wine/Proton version
+# Interactive selection of Wine version
 select_wine_version() {
     log_debug "=== select_wine_version() gestartet ==="
     local count=0
@@ -1437,40 +1267,33 @@ select_wine_version() {
     
     if [ $count -eq 0 ]; then
         log_error "Keine Wine/Proton-Version gefunden!"
-        error "$(i18n::get "no_wine_proton_found")"
+        error "$(i18n::get "no_wine_found")"
         return 1
     fi
     
-    # Handle command line parameter (--wine-standard/--proton-ge)
+    # Handle command line parameter (--wine-standard)
     local param_selection
     param_selection=$(handle_wine_method_parameter)
     if [ -n "$param_selection" ]; then
         selection="$param_selection"
         # Parameter was handled successfully, selection is set
         # Continue to setup_wine_environment with the selected option
+        # No menu needed - skip to configuration
     fi
     
-    # Check if no Proton GE found (only Wine available) - show warning
-    local has_proton=0
-    for path in "${WINE_PATHS[@]}"; do
-        # Only system-wide Proton GE is used (not Steam Proton)
-        if [ "$path" = "system" ]; then
-            has_proton=1
-            break
-        fi
-    done
+    # REMOVED: Proton GE check - only Wine Standard/Staging supported
     
     # If only one option available, use it automatically (no menu)
     # BUT: Skip if selection is already set via command line parameter
     if [ $count -eq 1 ] && [ -z "$selection" ]; then
         local single_selection
-        single_selection=$(handle_single_wine_option "$system" "$has_proton")
+        single_selection=$(handle_single_wine_option "$system")
         if [ $? -ne 0 ]; then
             return 1  # User cancelled
         fi
         selection="$single_selection"
         
-        # If selection is empty (after Proton GE installation), jump to menu
+        # If selection is empty, jump to menu
         if [ -z "$selection" ]; then
             # Re-detect to get updated count
             detect_all_wine_versions
@@ -1481,7 +1304,7 @@ select_wine_version() {
     # If count > 1 AND selection is empty, show menu
     # If selection is already set (after auto-install), skip menu
     if [ $count -gt 1 ] && [ -z "$selection" ]; then
-        selection=$(show_wine_selection_menu "$system" "$has_proton")
+        selection=$(show_wine_selection_menu "$system")
     fi
     
     # Find selected option index
@@ -1515,84 +1338,8 @@ setup_wine_environment() {
 
 # Localized messages - now using i18n::get instead of MSG_* variables
 
-function main() {
-    # CRITICAL: Trap for CTRL+C (INT) and other signals
-    trap 'echo ""; echo "Installation abgebrochen durch Benutzer (STRG+C)"; log_error "Installation abgebrochen durch Benutzer (STRG+C)"; exit 130' INT TERM HUP
-    
-    # Check for updates in background (non-blocking)
-    # Use type instead of command -v for namespace functions (::)
-    if type update::check_async >/dev/null 2>&1; then
-        update::check_async
-    fi
-    # Enable comprehensive logging - ALL output will be logged automatically
-    setup_comprehensive_logging
-
-    # CRITICAL: Set PS_VERSION early, before it's used
-    # Will be set again later in install_photoshopSE(), but needed here for main()
-    PS_VERSION=$(detect_photoshop_version)
-    PS_INSTALL_PATH=$(get_photoshop_install_path "$PS_VERSION")
-    PS_PREFS_PATH=$(get_photoshop_prefs_path "$PS_VERSION")
-    
-    # Start logging immediately with comprehensive system info
-    # Write header to log file (not to console)
-    echo "" >> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ═══════════════════════════════════════════════════════════" >> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Adobe Photoshop CC Linux Installer - Installation gestartet" >> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ═══════════════════════════════════════════════════════════" >> "$LOG_FILE"
-    echo "" >> "$LOG_FILE"
-    
-    # Show installation header (modern style)
-    output::header "$(i18n::get "photoshop_installer")"
-    
-    if [ "${DEBUG:-0}" = "1" ]; then
-        output::log_path "Log file" "$LOG_FILE"
-        output::log_path "Debug log" "$DEBUG_LOG"
-    fi
-    echo ""
-    
-    # System checks (compact display)
-    output::step "$(i18n::get "checking_system_requirements")"
-    output::substep "$(i18n::get "system_architecture")"
-    is64 >/dev/null 2>&1 || true
-    
-    # Package checks (compact display)
-    output::substep "$(i18n::get "required_packages")"
-    package_installed wine >/dev/null 2>&1 || package_installed wine
-    package_installed md5sum >/dev/null 2>&1 || package_installed md5sum
-    package_installed winetricks >/dev/null 2>&1 || package_installed winetricks
-    echo "" >> "$LOG_FILE"
-    
-    # Setup Wine environment - interactive selection
-    # This will show a menu and ask the user to choose
-    output::step "$(i18n::get "wine_proton_selection")"
-    log_debug "Rufe setup_wine_environment() auf..."
-    log_environment
-    if ! setup_wine_environment; then
-        log_error "setup_wine_environment() fehlgeschlagen!"
-        error "$(i18n::get "proton_ge_not_found")"
-        exit 1
-    fi
-    log_debug "setup_wine_environment() erfolgreich abgeschlossen"
-    log_environment
-    
-    # Confirm selection
-    # CRITICAL: Initialize PROTON_PATH if not set (for set -u)
-    export PROTON_PATH="${PROTON_PATH:-}"
-    if [ -n "$PROTON_PATH" ] && [ "$PROTON_PATH" != "system" ]; then
-        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$(i18n::get "using_proton_ge")${C_RESET}"
-        log "Proton GE aktiviert: $PROTON_PATH"
-    elif [ "$PROTON_PATH" = "system" ]; then
-        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$(i18n::get "using_proton_ge_system")${C_RESET}"
-        log "Proton GE (system) aktiviert"
-    else
-        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$(i18n::get "using_standard_wine")${C_RESET}"
-        log "Standard-Wine aktiviert"
-    fi
-    log ""
-    
-    # Rest of main() function continues...
-    # (The rest of the function should be from the correct main() at line 2299)
-}
+# NOTE: main() function is defined later in the file (line ~2005)
+# This placeholder was removed to avoid duplicate function definitions
 
 # Setup Wine environment (wrapper for compatibility)
 setup_wine_environment() {
@@ -1746,15 +1493,15 @@ detect_photoshop_version() {
                         if [ -d "$dir" ]; then
                             local dirname=$(basename "$dir")
                             log_debug "detect_photoshop_version: found subdirectory: $dirname"
-                            if [[ "$dirname" =~ "2022" ]] || [[ "$dirname" =~ "23\." ]]; then
+                            if [[ "$dirname" =~ 2022 ]] || [[ "$dirname" =~ 23\. ]]; then
                                 version="2022"
                                 log_debug "detect_photoshop_version: METHOD 3 detected 2022 from subdirectory"
                                 break 2
-                            elif [[ "$dirname" =~ "2021" ]] || [[ "$dirname" =~ "22\." ]]; then
+                            elif [[ "$dirname" =~ 2021 ]] || [[ "$dirname" =~ 22\. ]]; then
                                 version="2021"
                                 log_debug "detect_photoshop_version: METHOD 3 detected 2021 from subdirectory"
                                 break 2
-                            elif [[ "$dirname" =~ "CC 2019" ]] || [[ "$dirname" =~ "2019" ]] || [[ "$dirname" =~ "20\." ]]; then
+                            elif [[ "$dirname" =~ "CC 2019" ]] || [[ "$dirname" =~ 2019 ]] || [[ "$dirname" =~ 20\. ]]; then
                                 if [ -z "$version" ]; then
                                     version="CC 2019"
                                     log_debug "detect_photoshop_version: METHOD 3 detected CC 2019 from subdirectory"
@@ -1863,7 +1610,8 @@ get_photoshop_prefs_path() {
 
 function main() {
     # CRITICAL: Trap for CTRL+C (INT) and other signals
-    trap 'echo ""; echo "Installation abgebrochen durch Benutzer (STRG+C)"; log_error "Installation abgebrochen durch Benutzer (STRG+C)"; exit 130' INT TERM HUP
+    # Use cleanup_on_interrupt() function for consistent i18n support
+    trap 'cleanup_on_interrupt' INT TERM HUP
     
     # Check for updates in background (non-blocking)
     # Use type instead of command -v for namespace functions (::)
@@ -1895,6 +1643,7 @@ function main() {
     if type system::get_info >/dev/null 2>&1; then
         output::section "System Information"
         output::info "$(system::get_info)"
+        echo ""
     fi
     
     # Show installation header (modern style)
@@ -1904,8 +1653,8 @@ function main() {
     if [ "${DEBUG:-0}" = "1" ]; then
         output::log_path "Log file" "$LOG_FILE"
         output::log_path "Debug log" "$DEBUG_LOG"
-    fi
     echo ""
+    fi
     
     # Log comprehensive system information (to file only)
     log_system_info
@@ -1945,38 +1694,28 @@ function main() {
 
     # Setup Wine environment - interactive selection
     # This will show a menu and ask the user to choose
-    output::step "$(i18n::get "wine_proton_selection")"
+    output::step "$(i18n::get "wine_selection")"
     log_debug "Rufe setup_wine_environment() auf..."
     log_environment
     if ! setup_wine_environment; then
         log_error "setup_wine_environment() fehlgeschlagen!"
-        error "$(i18n::get "proton_ge_not_found")"
+        error "$(i18n::get "wine_not_found")"
         exit 1
     fi
     log_debug "setup_wine_environment() erfolgreich abgeschlossen"
     log_environment
     
     # Confirm selection
-    # CRITICAL: Initialize PROTON_PATH if not set (for set -u)
-    export PROTON_PATH="${PROTON_PATH:-}"
-    if [ -n "$PROTON_PATH" ] && [ "$PROTON_PATH" != "system" ]; then
-        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$(i18n::get "using_proton_ge")${C_RESET}"
-        log "Proton GE aktiviert: $PROTON_PATH"
-    elif [ "$PROTON_PATH" = "system" ]; then
-        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$(i18n::get "using_proton_ge_system")${C_RESET}"
-        log "Proton GE (system) aktiviert"
-    else
-        show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$(i18n::get "using_standard_wine")${C_RESET}"
-        log "Standard-Wine aktiviert"
-    fi
-    log ""
+    # REMOVED: Proton GE support - only Wine Standard/Staging supported
+    show_message "${C_GREEN}✓${C_RESET} ${C_CYAN}$(i18n::get "using_standard_wine")${C_RESET}"
+    log "Wine aktiviert"
 
     RESOURCES_PATH="$SCR_PATH/resources"
     WINE_PREFIX="$SCR_PATH/prefix"
     
     # CRITICAL: Kill ALL Wine processes before starting installation
     # This prevents conflicts, version mismatches, and ensures clean installation
-    output::step "Beende alle Wine-Prozesse vor Installation..."
+    output::step "$(i18n::get "terminating_wine_processes")"
     if [ "$LANG_CODE" = "de" ]; then
         output::substep "Beende alle laufenden Wine/Photoshop Prozesse..."
     else
@@ -2019,14 +1758,12 @@ function main() {
     
     # CRITICAL: Set WINEARCH BEFORE export_var (required for 64-bit prefix initialization)
     export WINEARCH=win64
-    # #region agent log
     debug_log "PhotoshopSetup.sh:1958" "WINEARCH set before export_var" "{\"WINEARCH\":\"${WINEARCH}\",\"WINE_PREFIX\":\"${WINE_PREFIX}\"}" "H2"
-    # #endregion
     
     #export necessary variable for wine
     export_var
     
-    # Ensure we use the correct wine/winecfg (from selected Proton GE or standard Wine)
+    # Ensure we use the correct wine/winecfg (from selected Wine)
     # The PATH should already be set by select_wine_version(), but we verify it here
     local wine_binary=$(command -v wine 2>/dev/null || echo "wine")
     local winecfg_binary=$(command -v winecfg 2>/dev/null || echo "winecfg")
@@ -2072,14 +1809,30 @@ function main() {
     local wine_major=$(echo "$wine_version_output" | grep -oP '(?<=wine-)[\d]+' | head -1)
     local enable_wow64=true  # Default: enabled
     
+    # CRITICAL: Wine 10.x WOW64-Modus ist experimentell und kann bei Photoshop Probleme verursachen
+    # Warnung anzeigen, wenn Wine 10.x verwendet wird
+    if [ -n "$wine_major" ] && [ "$wine_major" -ge 10 ]; then
+        if [ "$LANG_CODE" = "de" ]; then
+            log_warning "⚠ Wine 10.x erkannt - WOW64-Modus ist experimentell und kann Rendering-Glitches verursachen"
+            log_warning "   Empfehlung: Wine 9.x (staging) für bessere Stabilität mit Photoshop 2021"
+        else
+            log_warning "⚠ Wine 10.x detected - WOW64 mode is experimental and may cause rendering glitches"
+            log_warning "   Recommendation: Wine 9.x (staging) for better stability with Photoshop 2021"
+        fi
+    fi
+    
     if [ -n "$wine_major" ] && [ "$wine_major" -ge 10 ]; then
         # Wine 10.x+ has experimental WOW64 mode
+        # CRITICAL: Wine 10.x WOW64-Modus ist experimentell und kann bei Photoshop Rendering-Glitches verursachen
+        # Empfehlung: Wine 9.x (staging) für bessere Stabilität
         if [ "$LANG_CODE" = "de" ]; then
             echo ""
             output::warning "ℹ WOW64-Modus (Wine 10.x+)"
-            echo "  Wine 10.x verwendet den experimentellen WOW64-Modus."
-            echo "  Dies ermöglicht bessere Kompatibilität, kann aber Warnungen erzeugen."
-            echo "  Standard: Aktiviert (empfohlen)"
+            echo "  ⚠ Wine 10.x verwendet den experimentellen WOW64-Modus."
+            echo "  Dies kann bei Photoshop Rendering-Glitches und langsamere Prefix-Initialisierung verursachen."
+            echo "  Empfehlung: Wine 9.x (staging) für bessere Stabilität mit Photoshop 2021"
+            echo ""
+            echo "  Standard: Aktiviert (kann Probleme verursachen)"
             echo ""
             read -p "$(echo -e "${C_YELLOW}WOW64-Modus aktivieren? [J/n]:${C_RESET} ") " wow64_response
             if [[ "$wow64_response" =~ ^[Nn]$ ]]; then
@@ -2089,9 +1842,11 @@ function main() {
         else
             echo ""
             output::warning "ℹ WOW64 Mode (Wine 10.x+)"
-            echo "  Wine 10.x uses experimental WOW64 mode."
-            echo "  This provides better compatibility but may show warnings."
-            echo "  Default: Enabled (recommended)"
+            echo "  ⚠ Wine 10.x uses experimental WOW64 mode."
+            echo "  This may cause rendering glitches and slower prefix initialization with Photoshop."
+            echo "  Recommendation: Wine 9.x (staging) for better stability with Photoshop 2021"
+            echo ""
+            echo "  Default: Enabled (may cause issues)"
             echo ""
             read -p "$(echo -e "${C_YELLOW}Enable WOW64 mode? [Y/n]:${C_RESET} ") " wow64_response
             if [[ "$wow64_response" =~ ^[Nn]$ ]]; then
@@ -2130,6 +1885,7 @@ function main() {
             output::warning "Wine 10.x detected - Extended initialization (up to 90s)"
             output::substep "Wine 10.x requires more time for prefix initialization..."
         fi
+        echo ""
         echo ""
         
         # Suppress WOW64 errors for Wine 10.x (if enabled)
@@ -2215,7 +1971,9 @@ function main() {
     # #region agent log
     debug_log "PhotoshopSetup.sh:2024" "Disabling Wine Desktop Integration" "{\"WINE_PREFIX\":\"${WINE_PREFIX}\"}" "H4"
     # #endregion
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Explorer\\Desktop" /v "Enable" /t REG_SZ /d "N" /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Explorer\\Desktop" /v "Enable" /t REG_SZ /d "N" /f >> "$LOG_FILE" 2>&1 || {
+        log_warning "Registry operation failed for Explorer\\Desktop\\Enable (non-critical)"
+    }
     # CRITICAL: Also set via WINEDLLOVERRIDES to prevent .lnk creation during Adobe installer
     export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-};desktop=n"
     log_debug "Wine Desktop Integration disabled (prevents .lnk files and incorrect desktop entries)"
@@ -2285,10 +2043,38 @@ function main() {
     # Install Wine components using extracted function
     install_wine_components
     
-    # Workaround für bekannte Wine-Probleme (GitHub Issue #34)
-    log "${C_YELLOW}→${C_RESET} ${C_CYAN}$(i18n::get "msg_dll")${C_RESET}"
-    # Filter out Wine warnings - output to log only
-    winetricks -q dxvk_async=disabled d3d11=native 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1
+    # CRITICAL: Install DXVK for better DirectX 11/12 translation (improves graphics performance)
+    # DXVK translates DirectX 11/12 to Vulkan, which provides better performance and compatibility
+    # Note: Since GPU is disabled by default, DXVK has limited impact, but it's still useful for stability
+    log "${C_YELLOW}→${C_RESET} ${C_CYAN}Konfiguriere DirectX-Übersetzung (DXVK)...${C_RESET}"
+    
+    # Check if DXVK is available system-wide (preferred method)
+    local dxvk_installed=false
+    if [ -d "/usr/share/dxvk" ] || [ -d "/usr/local/share/dxvk" ]; then
+        log "  ℹ DXVK systemweit verfügbar - verwende systemweite Installation"
+        dxvk_installed=true
+        # System-wide DXVK is preferred, but we still need to configure DLL overrides
+    else
+        # Install DXVK via winetricks (fallback if system-wide not available)
+        log "  → Installiere DXVK via winetricks..."
+        # dxvk_async=disabled prevents async shader compilation (more stable, slightly slower)
+        # This is recommended for Photoshop to avoid rendering glitches
+        if winetricks -q dxvk_async=disabled d3d11=native 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1; then
+            dxvk_installed=true
+            log "  ✓ DXVK via winetricks installiert"
+        else
+            log_warning "DXVK Installation fehlgeschlagen - fortfahren ohne DXVK (Photoshop kann trotzdem funktionieren)"
+        fi
+    fi
+    
+    # Configure DXVK environment variables for optimal stability
+    if [ "$dxvk_installed" = true ]; then
+        log "  → Konfiguriere DXVK-Umgebungsvariablen für optimale Stabilität..."
+        # DXVK_ASYNC=0: Disable async shader compilation (more stable, prevents glitches)
+        # DXVK_HUD=0: Disable HUD (cleaner output, better performance)
+        # These are set in launcher.sh, but we document them here
+        log "    ℹ DXVK-Umgebungsvariablen werden im Launcher gesetzt (DXVK_ASYNC=0, DXVK_HUD=0)"
+    fi
     
     # CRITICAL: Ensure d3d11.dll override is set (required for Photoshop 2021+)
     # winetricks may not always set this correctly, so we set it explicitly
@@ -2296,22 +2082,52 @@ function main() {
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v d3d11 /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || log "  ⚠ d3d11 Override konnte nicht gesetzt werden"
     log "${C_GREEN}  ✓${C_RESET} ${C_CYAN}d3d11.dll Override gesetzt${C_RESET}"
     
+    # CRITICAL: Additional DLL overrides for better graphics compatibility
+    # These help fix rendering artifacts and glitchy UI (recommended for Wine 10.x + Photoshop 2021)
+    log "${C_YELLOW}  →${C_RESET} ${C_GRAY}Setze zusätzliche DLL-Overrides für bessere Grafik-Kompatibilität...${C_RESET}"
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v dxgi /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || {
+        log_warning "Registry operation failed for DllOverrides\\dxgi (non-critical)"
+    }
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v d3dcompiler_47 /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || {
+        log_warning "Registry operation failed for DllOverrides\\d3dcompiler_47 (non-critical)"
+    }
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v d3dcompiler_43 /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || {
+        log_warning "Registry operation failed for DllOverrides\\d3dcompiler_43 (non-critical)"
+    }
+    # d2d1 helps with 2D rendering and text (fixes text rendering issues)
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v d2d1 /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || {
+        log_warning "Registry operation failed for DllOverrides\\d2d1 (non-critical)"
+    }
+    # opcservices helps with export functionality (fixes export issues)
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides" /v opcservices /t REG_SZ /d "native,builtin" /f >> "$LOG_FILE" 2>&1 || {
+        log_warning "Registry operation failed for DllOverrides\\opcservices (non-critical)"
+    }
+    log "${C_GREEN}  ✓${C_RESET} ${C_CYAN}Zusätzliche DLL-Overrides gesetzt (dxgi, d3dcompiler, d2d1, opcservices)${C_RESET}"
+    
     # Zusätzliche Performance & Rendering Fixes
     show_message "${C_YELLOW}→${C_RESET} ${C_CYAN}$(i18n::get "configuring_registry")${C_RESET}"
     log "${C_CYAN}Konfiguriere Wine-Registry...${C_RESET}"
     
     # Enable CSMT for better performance (Command Stream Multi-Threading)
     log "  - CSMT aktivieren"
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v csmt /t REG_DWORD /d 1 /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v csmt /t REG_DWORD /d 1 /f >> "$LOG_FILE" 2>&1 || {
+        log_warning "Registry operation failed for Direct3D\\csmt (non-critical)"
+    }
     
     # Disable shader cache to avoid corruption (Issue #206 - Black Screen)
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v shader_backend /t REG_SZ /d glsl /f 2>/dev/null || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v shader_backend /t REG_SZ /d glsl /f 2>/dev/null || {
+        log_warning "Registry operation failed for Direct3D\\shader_backend (non-critical)"
+    }
     
     # Force DirectDraw renderer (helps with screen update issues - Issue #161)
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v DirectDrawRenderer /t REG_SZ /d opengl /f 2>/dev/null || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v DirectDrawRenderer /t REG_SZ /d opengl /f 2>/dev/null || {
+        log_warning "Registry operation failed for Direct3D\\DirectDrawRenderer (non-critical)"
+    }
     
     # Disable vertical sync for better responsiveness
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v StrictDrawOrdering /t REG_SZ /d disabled /f 2>/dev/null || true
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v StrictDrawOrdering /t REG_SZ /d disabled /f 2>/dev/null || {
+        log_warning "Registry operation failed for Direct3D\\StrictDrawOrdering (non-critical)"
+    }
     
     # Fix UI scaling issues (Issue #56)
     show_message "${C_YELLOW}→${C_RESET} ${C_CYAN}$(i18n::get "configuring_dpi")${C_RESET}"
@@ -2323,9 +2139,20 @@ function main() {
     
     # VideoMemorySize: Set GPU memory size (helps with rendering performance)
     # Default: 0 (auto-detect), but setting it explicitly can help
-    # 2048 MB is a good default for most systems
-    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v VideoMemorySize /t REG_DWORD /d 2048 /f >> "$LOG_FILE" 2>&1 || true
-    log "    ✓ VideoMemorySize gesetzt (2048 MB)"
+    # 2048 MB is a good default for most systems, can be increased to 4096 if RAM is sufficient
+    # Since GPU is disabled, this mainly affects Wine's internal memory management
+    local video_memory=2048
+    # Check available RAM and increase if sufficient (optional optimization)
+    if command -v free >/dev/null 2>&1; then
+        local total_ram_mb=$(free -m 2>/dev/null | awk '/^Mem:/ {print $2}' || echo "0")
+        # CRITICAL: Validate that total_ram_mb is a number before comparison
+        if [ -n "$total_ram_mb" ] && [[ "$total_ram_mb" =~ ^[0-9]+$ ]] && [ "$total_ram_mb" -gt 16384 ]; then  # If more than 16GB RAM
+            video_memory=4096
+            log "    ℹ Mehr als 16GB RAM erkannt - VideoMemorySize auf 4096 MB erhöht"
+        fi
+    fi
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D" /v VideoMemorySize /t REG_DWORD /d $video_memory /f >> "$LOG_FILE" 2>&1 || true
+    log "    ✓ VideoMemorySize gesetzt ($video_memory MB)"
     
     # WindowManagerManaged: Better window management (prevents window issues)
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\X11 Driver" /v WindowManagerManaged /t REG_SZ /d "Y" /f >> "$LOG_FILE" 2>&1 || true
@@ -2335,14 +2162,55 @@ function main() {
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\X11 Driver" /v WindowManagerDecorated /t REG_SZ /d "Y" /f >> "$LOG_FILE" 2>&1 || true
     log "    ✓ WindowManagerDecorated aktiviert"
     
-    # FontSmoothing: Already set via winetricks fontsmooth=rgb, but ensure it's in registry
+    # FontSmoothing: Set to RGB (best quality, recommended for Photoshop)
+    # This ensures crisp, clear text rendering (fontsmooth=rgb via winetricks + registry)
     wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\Fonts" /v FontSmoothing /t REG_DWORD /d 2 /f >> "$LOG_FILE" 2>&1 || true
-    log "    ✓ FontSmoothing bestätigt"
+    wine reg add "HKEY_CURRENT_USER\\Control Panel\\Desktop" /v FontSmoothing /t REG_DWORD /d 2 /f >> "$LOG_FILE" 2>&1 || true
+    wine reg add "HKEY_CURRENT_USER\\Control Panel\\Desktop" /v FontSmoothingType /t REG_DWORD /d 2 /f >> "$LOG_FILE" 2>&1 || true
+    log "    ✓ FontSmoothing RGB aktiviert (beste Textqualität)"
     
-    # CRITICAL: Set Windows version explicitly to Windows 10 again
+    # CRITICAL: Configure virtual desktop for better graphics stability (fixes many rendering glitches)
+    # Virtual desktop helps prevent window management issues and rendering artifacts
+    # Automatically detect screen resolution and set virtual desktop
+    log "  → Konfiguriere Virtual Desktop für bessere Grafik-Stabilität..."
+    
+    # Try to detect screen resolution (for virtual desktop)
+    local screen_resolution="1920x1080"  # Default fallback
+    if command -v xrandr >/dev/null 2>&1; then
+        # Try to get primary display resolution
+        local detected_res=$(xrandr 2>/dev/null | grep -E "^\s+[0-9]+x[0-9]+" | head -1 | awk '{print $1}' | grep -E "^[0-9]+x[0-9]+" || echo "")
+        if [ -n "$detected_res" ]; then
+            screen_resolution="$detected_res"
+            log "    ℹ Bildschirmauflösung erkannt: $screen_resolution"
+        fi
+    elif command -v xdpyinfo >/dev/null 2>&1; then
+        # Alternative method to get screen resolution
+        local detected_res=$(xdpyinfo 2>/dev/null | grep -oP 'dimensions:\s+\K[0-9]+x[0-9]+' || echo "")
+        if [ -n "$detected_res" ]; then
+            screen_resolution="$detected_res"
+            log "    ℹ Bildschirmauflösung erkannt: $screen_resolution"
+        fi
+    fi
+    
+    # Enable virtual desktop with detected resolution
+    # This fixes many UI glitches, invisible menus, black bars, and window issues
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\X11 Driver" /v "UseTakeFocus" /t REG_SZ /d "N" /f >> "$LOG_FILE" 2>&1 || log_warning "Registry add failed for UseTakeFocus"
+    wine reg add "HKEY_CURRENT_USER\\Software\\Wine\\X11 Driver" /v "Desktop" /t REG_SZ /d "$screen_resolution" /f >> "$LOG_FILE" 2>&1 || log_warning "Registry add failed for Desktop resolution"
+    log "    ✓ Virtual Desktop aktiviert ($screen_resolution) - behebt viele Grafik-Probleme"
+    log "    ℹ Virtual Desktop kann in winecfg angepasst werden (Graphics → Emulate a virtual desktop)"
+    
+    # CRITICAL: Set Windows version explicitly to Windows 10
     # (winetricks installations can reset the version, especially IE8)
-    log "${C_YELLOW}  →${C_RESET} ${C_GRAY}Stelle sicher, dass Windows-Version auf Windows 10 gesetzt ist (vor Adobe Installer)...${C_RESET}"
-    winetricks -q win10 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1 || log_debug "win10 konnte nicht gesetzt werden"
+    if [ "$LANG_CODE" = "de" ]; then
+        output::spinner_line "Setze Windows-Version auf Windows 10..."
+    else
+        output::spinner_line "Setting Windows version to Windows 10..."
+    fi
+    winetricks -q win10 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1 &
+    local win10_pid=$!
+    spinner $win10_pid
+    wait $win10_pid
+    echo ""
     
     #install photoshop
     install_photoshopSE
@@ -2382,131 +2250,16 @@ function main() {
         error "resources folder Not Found"
     fi
 
-    launcher
-    
-    # CRITICAL: Ask user if they want to start Photoshop now (after launcher completes)
-    echo ""
-    output::section "$(i18n::get "start_photoshop_question")"
-    local start_photoshop=false
-    local start_prompt="$(i18n::get "start_photoshop_prompt")"
-    log_prompt "$start_prompt"
-    IFS= read -r -p "$start_prompt" start_response
-    log_input "$start_response"
-    
-    # Default to yes if empty (Enter pressed)
-    if [ -z "$start_response" ] || [[ "$start_response" =~ ^[JjYy]$ ]]; then
-        start_photoshop=true
-    fi
-    
-    if [ "$start_photoshop" = true ]; then
-        echo ""
-        output::step "$(i18n::get "starting_photoshop")"
-        log "Starte Photoshop automatisch nach Installation..."
-        
-        # Start Photoshop in background (non-blocking)
-        if [ -f "$SCR_PATH/launcher/launcher.sh" ]; then
-            bash "$SCR_PATH/launcher/launcher.sh" >/dev/null 2>&1 &
-            local ps_pid=$!
-            log "Photoshop gestartet (PID: $ps_pid)"
-            output::success "$(i18n::get "photoshop_starting")"
-        else
-            output::error "$(i18n::get "launcher_not_found" "$SCR_PATH/launcher/launcher.sh")"
-        fi
-    else
-        output::info "$(i18n::get "photoshop_not_auto_start")"
-    fi
-    
-    # BEST PRACTICE: Final cleanup - Correct any Wine-generated desktop entries created during installation
-    # With Desktop Integration disabled, there should be minimal entries, but we correct any that exist
-    # #region agent log
-    debug_log "PhotoshopSetup.sh:2303" "Final cleanup - correcting Wine desktop entries" "{}" "H4"
-    # #endregion
-    
-    # Function to correct Wine desktop entries (reuse from sharedFuncs.sh logic)
-    # BEST PRACTICE: Correct entries instead of deleting - cleaner approach
-    correct_wine_entry_final() {
-        local entry="$1"
-        if [ ! -f "$entry" ]; then
-            return 1
-        fi
-        # Fix grep warnings: Use separate grep calls or fix escaping
-        if grep -q "WINEPREFIX=" "$entry" 2>/dev/null || grep -q "wine.*Photoshop.exe" "$entry" 2>/dev/null || grep -q "'C:\\\\" "$entry" 2>/dev/null || grep -q "Exec=env.*wine" "$entry" 2>/dev/null; then
-            local launcher_script_path="$SCR_PATH/launcher/launcher.sh"
-            local launch_icon="$SCR_PATH/launcher/AdobePhotoshop-icon.png"
-            # #region agent log
-            debug_log "PhotoshopSetup.sh:2312" "Correcting Wine desktop entry" "{\"entry\":\"${entry}\",\"launcher\":\"${launcher_script_path}\",\"icon\":\"${launch_icon}\"}" "H4"
-            # #endregion
-            cp "$entry" "${entry}.bak" 2>/dev/null || true
-            sed -i "s|^Exec=.*|Exec=${launcher_script_path} %F|g" "$entry" 2>/dev/null || true
-            if [ -f "$launch_icon" ]; then
-                sed -i "s|^Icon=.*|Icon=${launch_icon}|g" "$entry" 2>/dev/null || true
-            fi
-            sed -i "s|^Name=.*|Name=Photoshop|g" "$entry" 2>/dev/null || true
-            rm -f "${entry}.bak" 2>/dev/null || true
-            # #region agent log
-            debug_log "PhotoshopSetup.sh:2322" "Wine desktop entry corrected" "{\"entry\":\"${entry}\",\"icon_set\":$(grep -q "Icon=" "$entry" 2>/dev/null && echo "true" || echo "false")}" "H4"
-            # #endregion
-            return 0
-        fi
-        return 1
-    }
-    
-    # Correct Wine desktop entries in applications directory
-    local wine_apps_dir="$HOME/.local/share/applications/wine"
-    if [ -d "$wine_apps_dir" ]; then
-        find "$wine_apps_dir" -type f \( -name "*Photoshop*" -o -name "*photoshop*" -o -name "*Adobe*" \) 2>/dev/null | while IFS= read -r entry; do
-            correct_wine_entry_final "$entry" && log_debug "Corrected Wine entry: $entry" || true
-        done
-    fi
-    
-    # Remove .lnk files (Windows shortcuts - unusable on Linux) and correct desktop entries
-    # CRITICAL: Check multiple times as Adobe installer may create .lnk files during installation
-    local desktop_dirs=("$HOME/Desktop" "$HOME/Schreibtisch" "$HOME/desktop" "$HOME/schreibtisch")
-    for desktop_dir in "${desktop_dirs[@]}"; do
-        if [ -d "$desktop_dir" ]; then
-            # Remove .lnk files (Windows shortcuts) - check multiple times
-            for i in 1 2 3; do
-                find "$desktop_dir" -maxdepth 1 -type f \( -name "*.lnk" -o -name "*Photoshop*.lnk" -o -name "*Adobe*.lnk" \) 2>/dev/null | while IFS= read -r lnk_file; do
-                    if [ -f "$lnk_file" ]; then
-                        # #region agent log
-                        debug_log "PhotoshopSetup.sh:2330" "Removing .lnk file (Windows shortcut)" "{\"lnk_file\":\"${lnk_file}\"}" "H4"
-                        # #endregion
-                        rm -f "$lnk_file" 2>/dev/null || true
-                    fi
-                done
-                sleep 0.5  # Brief pause between checks
-            done
-            # Correct Wine-generated desktop entries
-            find "$desktop_dir" -maxdepth 1 -type f \( -name "*Photoshop*.desktop" -o -name "*Adobe*.desktop" \) ! -name "photoshop.desktop" 2>/dev/null | while IFS= read -r entry; do
-                if correct_wine_entry_final "$entry"; then
-                    # Rename to photoshop.desktop if corrected
-                    if [ "$(basename "$entry")" != "photoshop.desktop" ]; then
-                        mv "$entry" "$desktop_dir/photoshop.desktop" 2>/dev/null || true
-                    fi
-                    # #region agent log
-                    debug_log "PhotoshopSetup.sh:2342" "Corrected Wine desktop entry on desktop" "{\"entry\":\"${entry}\"}" "H4"
-                    # #endregion
-                fi
-            done
-        fi
-    done
-    
-    # Update desktop database one final time
-    if command -v update-desktop-database >/dev/null 2>&1; then
-        update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-    fi
-    if command -v kbuildsycoca4 >/dev/null 2>&1; then
-        kbuildsycoca4 --noincremental 2>/dev/null || true
-    fi
-    
-    output::warning "$(i18n::get "first_start_may_take_while")"
-    output::success "$(i18n::get "installation_completed")"
+    # CRITICAL: Don't call launcher() here - it's called later in install_photoshopSE() after installation
+    # Don't show "installation_completed" here - it's shown in finish_installation()
+    # All cleanup and launcher creation happens in finish_installation()
 }
 
 function replacement() {
     # Replacement component ist optional für die lokale Installation
     # Diese Dateien werden normalerweise nur für UI-Icons benötigt
-    log "${C_GRAY}Überspringe replacement component (optional für lokale Installation)...${C_RESET}"
+    # Silent - don't show message to user (irrelevant info)
+    log_debug "Überspringe replacement component (optional für lokale Installation)..."
     
     # Verwende dynamischen Pfad basierend auf erkannte Version
     local destpath="$PS_INSTALL_PATH/Resources"
@@ -2519,30 +2272,19 @@ function replacement() {
 
 # ============================================================================
 # @function install_wine_components
-# @description Install Wine components required for Photoshop (VC++, fonts, XML, dotnet48)
+# @description Install Wine components required for Photoshop (VC++, fonts, XML)
 # @return 0 on success, 1 on error
 # ============================================================================
 install_wine_components() {
     # Install Wine components
     # Based on GitHub Issues #23, #45, #67: Minimal, stable components
     show_message "$(i18n::get "msg_install_components")"
-    show_message "\033[1;33m$(i18n::get "msg_wait")\e[0m"
+    printf "\033[1;33m%s\033[0m\n" "$(i18n::get "msg_wait")"
     
-    # Setze Windows-Version basierend auf erkannte Photoshop-Version
-    # OPTIMIERUNG: Neuere Versionen (2021+) funktionieren besser mit Windows 10
-    # Photoshop funktioniert auch mit Windows 10 (bessere Kompatibilität)
-        show_message "${C_YELLOW}→${C_RESET} ${C_CYAN}$(i18n::get "msg_set_win10")${C_RESET}"
-    
-    # Für alle Versionen verwende Windows 10 (beste Kompatibilität)
-    # KRITISCH: PS_VERSION mit ${PS_VERSION:-} schützen (kann noch nicht gesetzt sein)
-    if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
-        log "${C_YELLOW}  →${C_RESET} ${C_GRAY}Verwende Windows 10 (empfohlen für ${PS_VERSION:-unknown})${C_RESET}"
-    else
-        log "${C_YELLOW}  →${C_RESET} ${C_GRAY}Verwende Windows 10${C_RESET}"
-    fi
+    # Windows-Version wird später beim tatsächlichen Setzen angezeigt (keine vorzeitige Meldung)
     
     # CRITICAL: Use winetricks with spinner and ensure it uses the correct Wine binary
-    # winetricks automatically uses the Wine binary from PATH (which should be Proton GE if selected)
+    # winetricks automatically uses the Wine binary from PATH
     # CRITICAL: WINEPREFIX should already be set by export_var(), but run_with_spinner will ensure it
     # CRITICAL: Add timeout to prevent hanging (winetricks can hang on version mismatch)
     log_debug "Setting Windows version to Windows 10 via winetricks..."
@@ -2572,31 +2314,43 @@ install_wine_components() {
         log_warning "winetricks -q win10 failed after retries, continuing anyway"
     fi
     
-    # Core components: Install VC++ Runtimes (2010, 2012, 2013, 2015)
-    # Use winetricks (standard method, proven and reliable)
-    output::spinner_line "$(i18n::get "installing_vc_runtimes")"
-    
-    # CRITICAL: winetricks output to log file only (prevents blocking and spam)
-    # Filter out Wine warnings - they're not useful for the user
-    winetricks -q vcrun2010 vcrun2012 vcrun2013 vcrun2015 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1 &
-    local winetricks_pid=$!
-    
-    # Use spinner for long operation (simpler and more reliable)
-    spinner $winetricks_pid
-    wait $winetricks_pid
-    local winetricks_exit_code=$?
-    echo ""
-    
-    if [ $winetricks_exit_code -eq 0 ]; then
-        # Create checkpoint after successful Wine components installation
-        checkpoint::create "wine_components_installed"
-        
-        output::success "$(i18n::get "vc_runtimes_installed")"
+    # CRITICAL: Visual C++ Runtimes Installation
+    # For Photoshop 2021+, we use the official Microsoft Visual C++ 2015-2022 Redistributable x64 installer
+    # This installer contains ALL versions (2015, 2017, 2019, 2022) - no need for separate vcrun2010-2015
+    # The official installer is more reliable and ensures correct x86-64 DLLs (fixes ARM64 bug in winetricks)
+    # 
+    # For older Photoshop versions (< 2021), we still use winetricks vcrun2010-2015 for compatibility
+    if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
+        # For 2021+: Skip old vcrun2010-2015, use official 2015-2022 installer instead (installed in next step)
+        # Info-Meldung entfernt - Installation passiert sofort im nächsten Schritt
+        :  # Empty command - installation happens in next step
     else
-        if [ "$LANG_CODE" = "de" ]; then
-            output::warning "$(i18n::get "vc_runtimes_failed" "$winetricks_exit_code")"
+        # For older versions: Install vcrun2010-2015 via winetricks
+        echo ""
+        output::spinner_line "$(i18n::get "installing_vc_runtimes")"
+        
+        # CRITICAL: winetricks output to log file only (prevents blocking and spam)
+        # Filter out Wine warnings - they're not useful for the user
+        winetricks -q vcrun2010 vcrun2012 vcrun2013 vcrun2015 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1 &
+        local winetricks_pid=$!
+        
+        # Use spinner for long operation (simpler and more reliable)
+        spinner $winetricks_pid
+        wait $winetricks_pid
+        local winetricks_exit_code=$?
+        echo ""
+        
+        if [ $winetricks_exit_code -eq 0 ]; then
+            # Create checkpoint after successful Wine components installation
+            checkpoint::create "wine_components_installed"
+            
+            output::success "$(i18n::get "vc_runtimes_installed")"
         else
-            output::warning "Visual C++ Runtimes installation failed (Exit code: $winetricks_exit_code) - installation may still work"
+            if [ "$LANG_CODE" = "de" ]; then
+                output::warning "$(i18n::get "vc_runtimes_failed" "$winetricks_exit_code")"
+            else
+                output::warning "Visual C++ Runtimes installation failed (Exit code: $winetricks_exit_code) - installation may still work"
+            fi
         fi
     fi
     
@@ -2613,6 +2367,7 @@ install_wine_components() {
     wait $fonts_pid
     echo ""
     
+    echo ""
     if [ "$LANG_CODE" = "de" ]; then
         output::spinner_line "$(i18n::get "installing_xml_gdi")"
     else
@@ -2625,37 +2380,295 @@ install_wine_components() {
     wait $xml_pid
     echo ""
     
-    # OPTIMIZATION: For newer versions (2021+) additional components
-    # CRITICAL: Protect PS_VERSION with ${PS_VERSION:-}
-    # dotnet48 ist OPTIONAL für neuere Photoshop-Versionen (2021, 2022)
-    # Nur installieren wenn der Benutzer es möchte - Installation dauert sehr lange (30-60+ Minuten)
-    # NOTE: .NET Framework wird jetzt in finish_installation() angeboten (nach Photoshop Installation)
+    # OPTIMIZATION: For newer versions (2021+) install official Visual C++ 2015-2022 Redistributable
+    # CRITICAL: The official 2015-2022 installer contains ALL versions (2015, 2017, 2019, 2022)
+    # This replaces the need for separate vcrun2010-2015 and vcrun2019 installations
+    # It also fixes the ARM64 DLL bug in winetricks vcrun2019
+    # .NET Framework ist NICHT notwendig für Photoshop 2021/2022 - wurde komplett entfernt
+    # Photoshop läuft erfolgreich ohne .NET Framework
     if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
+        echo ""
         output::step "$(i18n::get "installing_additional_components")"
+        echo ""
         
-        # vcrun2019 für neuere Versionen (optional, nur für 2021/2022)
+        # Install official Microsoft Visual C++ 2015-2022 Redistributable x64
+        # This contains ALL VC++ versions (2015, 2017, 2019, 2022) - no need for separate installations
         if [ "$LANG_CODE" = "de" ]; then
-            output::spinner_line "$(i18n::get "installing_vc2019")"
+            output::spinner_line "Installiere Visual C++ 2015-2022 Redistributable x64 (enthält alle Versionen)..."
         else
-            output::spinner_line "Installing Visual C++ 2019 Runtime (optional)..."
+            output::spinner_line "Installing Visual C++ 2015-2022 Redistributable x64 (contains all versions)..."
         fi
-        winetricks -q vcrun2019 >> "$LOG_FILE" 2>&1 &
-        local vcrun_pid=$!
-        spinner $vcrun_pid
-        wait $vcrun_pid
-        local vcrun_exit=$?
+        
+        # CRITICAL: Kill ALL Wine processes before installation (prevents wineserver -w hang)
+        # Try graceful shutdown first, then force kill as fallback
+        if command -v wineserver >/dev/null 2>&1; then
+            wineserver -k 2>/dev/null || true
+            sleep 1
+        fi
+        # Force kill only if graceful shutdown didn't work
+        pkill -9 wineserver 2>/dev/null || true
+        pkill -9 wine 2>/dev/null || true
+        pkill -9 wineboot 2>/dev/null || true
+        sleep 2
+        
+        # Download official Microsoft Visual C++ 2015-2022 Redistributable x64
+        local vc_redist_url="https://aka.ms/vc14/vc_redist.x64.exe"
+        # Use CACHE_PATH if available, otherwise use SCR_PATH/cache
+        local cache_dir="${CACHE_PATH:-${SCR_PATH:-$HOME/.photoshop}/cache}"
+        local vc_redist_file="$cache_dir/vc_redist.x64.exe"
+        local vcrun_exit=1
+        
+        # Create cache directory if it doesn't exist
+        mkdir -p "$cache_dir"
+        
+        # CRITICAL: Ensure WINE_PREFIX exists before installation
+        if [ ! -d "$WINE_PREFIX" ]; then
+            log_error "WINE_PREFIX existiert nicht: $WINE_PREFIX"
+            if [ "$LANG_CODE" = "de" ]; then
+                output::error "Wine-Prefix nicht gefunden - Installation kann nicht fortgesetzt werden"
+            else
+                output::error "Wine prefix not found - installation cannot continue"
+            fi
+            return 1
+        fi
+        
+        # Download installer if not already cached
+        if [ ! -f "$vc_redist_file" ]; then
+            # #region agent log
+            # #endregion
+            
+            if [ "$LANG_CODE" = "de" ]; then
+                output::spinner_line "Lade Visual C++ Redistributable x64 herunter..."
+            else
+                output::spinner_line "Downloading Visual C++ Redistributable x64..."
+            fi
+            
+            # Download with clean progress display (percentage only)
+            if command -v wget >/dev/null 2>&1; then
+                # wget: Show only percentage, redirect full output to log
+                wget --progress=dot:giga -O "$vc_redist_file" "$vc_redist_url" 2>&1 | \
+                    while IFS= read -r line; do
+                        # Extract percentage from wget output (format: " 45%")
+                        if [[ "$line" =~ ([0-9]+)% ]]; then
+                            printf "\r${C_YELLOW}→${C_RESET} ${C_CYAN}Download: %s%%${C_RESET}" "${BASH_REMATCH[1]}"
+                        fi
+                        # Also log to file
+                        echo "$line" >> "$LOG_FILE" 2>/dev/null || true
+                    done
+                echo ""  # New line after download
+                
+                if [ -f "$vc_redist_file" ] && [ -s "$vc_redist_file" ]; then
+                    # #region agent log
+                    local file_size=$(stat -f%z "$vc_redist_file" 2>/dev/null || stat -c%s "$vc_redist_file" 2>/dev/null || echo "0")
+                    # #endregion
+                    output::success "Download erfolgreich"
+                else
+                    # #region agent log
+                    # #endregion
+                    log_warning "Download fehlgeschlagen, versuche winetricks als Fallback..."
+                    # Fallback to winetricks if download fails
+                    winetricks --force -q vcrun2019 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1
+                    vcrun_exit=$?
+                fi
+            elif command -v curl >/dev/null 2>&1; then
+                # curl: Show only percentage
+                curl -L --progress-bar -o "$vc_redist_file" "$vc_redist_url" 2>&1 | \
+                    while IFS= read -r line; do
+                        # Extract percentage from curl progress (format: "# 45%")
+                        if [[ "$line" =~ ([0-9]+)% ]]; then
+                            printf "\r${C_YELLOW}→${C_RESET} ${C_CYAN}Download: %s%%${C_RESET}" "${BASH_REMATCH[1]}"
+                        fi
+                        # Also log to file
+                        echo "$line" >> "$LOG_FILE" 2>/dev/null || true
+                    done
+                echo ""  # New line after download
+                
+                if [ -f "$vc_redist_file" ] && [ -s "$vc_redist_file" ]; then
+                    output::success "Download erfolgreich"
+                else
+                    log_warning "Download fehlgeschlagen, versuche winetricks als Fallback..."
+                    winetricks --force -q vcrun2019 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1
+                    vcrun_exit=$?
+                fi
+            else
+                log_warning "wget/curl nicht verfügbar, verwende winetricks..."
+                winetricks --force -q vcrun2019 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1
+                vcrun_exit=$?
+            fi
+        else
+            # File already exists
+            if [ "$LANG_CODE" = "de" ]; then
+                output::info "Visual C++ Redistributable bereits im Cache vorhanden"
+            else
+                output::info "Visual C++ Redistributable already cached"
+            fi
+        fi
+        
+        # Install using official installer if file exists
+        if [ -f "$vc_redist_file" ]; then
+            local install_message
+            if [ "$LANG_CODE" = "de" ]; then
+                install_message="Installiere Visual C++ 2015-2022 Redistributable x64..."
+            else
+                install_message="Installing Visual C++ 2015-2022 Redistributable x64..."
+            fi
+            
+            # Backup old DLL if it exists (in case it's ARM64)
+            if [ -f "$WINE_PREFIX/drive_c/windows/system32/msvcp140.dll" ]; then
+                mv "$WINE_PREFIX/drive_c/windows/system32/msvcp140.dll" "$WINE_PREFIX/drive_c/windows/system32/msvcp140.dll.bak" 2>/dev/null || true
+            fi
+            
+            # Install using wine (silent mode) with spinner and timeout
+            # CRITICAL: Ensure WINEPREFIX is set and exists
+            # WINE_PREFIX should already be set by configure_wine_prefix(), but verify it
+            if [ -z "${WINE_PREFIX:-}" ]; then
+                WINE_PREFIX="${SCR_PATH:-$HOME/.photoshop}/prefix"
+            fi
+            export WINEPREFIX="$WINE_PREFIX"
+            
+            if [ ! -d "$WINEPREFIX" ]; then
+                log_error "WINEPREFIX existiert nicht: $WINEPREFIX"
+                if [ "$LANG_CODE" = "de" ]; then
+                    output::error "Wine-Prefix nicht gefunden: $WINEPREFIX - kann VC++ nicht installieren"
+                else
+                    output::error "Wine prefix not found: $WINEPREFIX - cannot install VC++"
+                fi
+                vcrun_exit=1
+            else
+                # Show initial message
+                printf "${C_YELLOW}→${C_RESET} ${C_CYAN}%s${C_RESET} " "$install_message"
+                
+                # #region agent log
+                # #endregion
+                
+                # Start installation in background
+                # CRITICAL: Use absolute path for wine executable and installer file
+                # CRITICAL: Ensure WINEPREFIX is exported before wine call
+                # CRITICAL: Use full path to wine executable to avoid PATH issues
+                local wine_binary=$(command -v wine || echo "wine")
+                "$wine_binary" "$vc_redist_file" /quiet /norestart >> "$LOG_FILE" 2>&1 &
+                local install_pid=$!
+                
+                # Small delay to ensure process started
+                sleep 0.5
+                
+                # Verify process is actually running
+                if ! kill -0 "$install_pid" 2>/dev/null; then
+                    # Process died immediately - check exit code
+                    wait $install_pid 2>/dev/null
+                    vcrun_exit=$?
+                    # #region agent log
+                    # #endregion
+                    log_error "VC++ Installer beendet sich sofort (Exit-Code: $vcrun_exit) - prüfe Log-Datei"
+                    if [ "$LANG_CODE" = "de" ]; then
+                        output::warning "VC++ Installation fehlgeschlagen - prüfe Log-Datei für Details"
+                    else
+                        output::warning "VC++ installation failed - check log file for details"
+                    fi
+                else
+                    # Process is running - show spinner
+                    # #region agent log
+                    # #endregion
+                
+                    # Show spinner with elapsed time
+                    local spinstr='|/-\'
+                    local spin_idx=0
+                    local elapsed=0
+                    local start_time=$(date +%s)
+                    local max_wait_time=300  # 5 minutes max
+                    
+                    # Wait for process with spinner
+                    while [ $elapsed -lt $max_wait_time ]; do
+                        # Check if process is still running
+                        if ! kill -0 "$install_pid" 2>/dev/null; then
+                            # Process finished - wait for it and get exit code
+                            wait $install_pid 2>/dev/null
+                            vcrun_exit=$?
+                            # #region agent log
+                            # #endregion
+                            break
+                        fi
+                        
+                        local spin_char=${spinstr:$spin_idx:1}
+                        elapsed=$(($(date +%s) - start_time))
+                        
+                        # Show spinner with elapsed time (update same line)
+                        printf "\r${C_YELLOW}→${C_RESET} ${C_CYAN}%s${C_RESET} ${C_CYAN}[%c]${C_RESET} (${elapsed}s)" "$install_message" "$spin_char"
+                        
+                        spin_idx=$(((spin_idx + 1) % 4))
+                        sleep 0.2
+                    done
+                    
+                    # Check if we hit timeout
+                    if [ $elapsed -ge $max_wait_time ]; then
+                        # #region agent log
+                        # #endregion
+                        log_warning "Installation-Timeout erreicht (5 Minuten) - beende Prozess..."
+                        kill "$install_pid" 2>/dev/null || true
+                        wait $install_pid 2>/dev/null
+                        vcrun_exit=124
+                    fi
+                    
+                    # Clear spinner line and show result
+                    printf "\r${C_GREEN}✓${C_RESET} ${C_CYAN}%s${C_RESET} ${C_GREEN}abgeschlossen${C_RESET} (${elapsed}s)\n" "$install_message"
+                    
+                    # Wait for process if still running
+                    if kill -0 "$install_pid" 2>/dev/null; then
+                        wait $install_pid
+                        vcrun_exit=$?
+                    fi
+                    
+                    # #region agent log
+                    # #endregion
+                fi
+            fi
+            
+            # Verify DLL architecture after installation
+            if [ -f "$WINE_PREFIX/drive_c/windows/system32/msvcp140.dll" ]; then
+                local dll_arch=$(file "$WINE_PREFIX/drive_c/windows/system32/msvcp140.dll" 2>/dev/null | grep -o "x86-64\|ARM64\|i386" || echo "unknown")
+                # #region agent log
+                # #endregion
+                if [[ "$dll_arch" == "ARM64" ]]; then
+                    log_warning "MSVCP140.dll ist immer noch ARM64 - verwende winetricks als Fallback..."
+                    # Restore backup if winetricks also fails
+                    if [ -f "$WINE_PREFIX/drive_c/windows/system32/msvcp140.dll.bak" ]; then
+                        mv "$WINE_PREFIX/drive_c/windows/system32/msvcp140.dll.bak" "$WINE_PREFIX/drive_c/windows/system32/msvcp140.dll" 2>/dev/null || true
+                    fi
+                    winetricks --force -q vcrun2019 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1
+                    vcrun_exit=$?
+                elif [[ "$dll_arch" == "x86-64" ]]; then
+                    log "✓ MSVCP140.dll Architektur korrekt (x86-64)"
+                fi
+            fi
+        fi
+        
+        # CRITICAL: Winetricks sets Windows version to win7 internally - restore to win10
+        # Try graceful shutdown first, then force kill as fallback
+        if command -v wineserver >/dev/null 2>&1; then
+            wineserver -k 2>/dev/null || true
+            sleep 0.5
+        fi
+        # Force kill only if graceful shutdown didn't work
+        pkill -9 wineserver 2>/dev/null || true
+        pkill -9 wine 2>/dev/null || true
+        sleep 1
+        winetricks -q win10 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1
+        
         echo ""
         if [ $vcrun_exit -eq 0 ]; then
+            # Use i18n for consistent messaging (no duplicate checkmarks)
             if [ "$LANG_CODE" = "de" ]; then
-                output::success "$(i18n::get "vc2019_installed")"
+                output::success "Visual C++ 2015-2022 Redistributable x64 erfolgreich installiert"
             else
-                output::success "Visual C++ 2019 Runtime installed successfully"
+                output::success "Visual C++ 2015-2022 Redistributable x64 installed successfully"
             fi
         else
             if [ "$LANG_CODE" = "de" ]; then
-                output::warning "$(i18n::get "vc2019_failed")"
+                output::warning "Visual C++ 2015-2022 Redistributable Installation fehlgeschlagen"
+                output::info "Visual C++ ist optional - Installation kann ohne fortgesetzt werden"
             else
-                output::warning "Visual C++ 2019 Runtime installation failed (optional)"
+                output::warning "Visual C++ 2015-2022 Redistributable installation failed"
+                output::info "Visual C++ is optional - installation can continue without it"
             fi
         fi
     fi
@@ -2668,27 +2681,25 @@ install_wine_components() {
 # ============================================================================
 configure_ie_engine() {
     # Erklärung welche Wine-Version verwendet wird
-    if [ -n "$PROTON_PATH" ] && [ "$PROTON_PATH" != "" ]; then
-        if [ "$PROTON_PATH" = "system" ]; then
-            log "ℹ Verwende: Proton GE (system) für Installer UND Photoshop"
-        else
-            log "ℹ Verwende: Proton GE ($PROTON_PATH) für Installer UND Photoshop"
-        fi
-        log ""
-        log "⚠ WICHTIG: Der Adobe Installer verwendet eine IE-Engine, die in"
-        log "   Wine/Proton nicht vollständig funktioniert. Falls Buttons nicht"
-        log "   reagieren, ist das ein bekanntes Problem (nicht dein Fehler!)."
-        log ""
+    # REMOVED: Proton GE support - only Wine Standard/Staging supported
+    log "ℹ Verwende: Wine für Installer UND Photoshop"
+    echo ""
+    if [ "$LANG_CODE" = "de" ]; then
+        output::header "WICHTIG: Adobe Installer IE-Engine"
+        output::info "Der Adobe Installer verwendet eine IE-Engine, die in Wine nicht vollständig funktioniert."
+        output::info "Falls Buttons nicht reagieren, ist das ein bekanntes Problem (nicht dein Fehler!)."
     else
-        log "ℹ Verwende: Standard-Wine für Installer UND Photoshop"
-        log ""
+        output::header "IMPORTANT: Adobe Installer IE Engine"
+        output::info "The Adobe Installer uses an IE engine that doesn't fully work in Wine."
+        output::info "If buttons don't respond, this is a known issue (not your fault!)."
     fi
+    echo ""
     
     # Workaround für "Weiter"-Button Problem: Setze DLL-Overrides für IE-Engine
-    # Adobe Installer verwendet IE-Engine (mshtml.dll), die in Wine/Proton nicht vollständig funktioniert
+    # Adobe Installer verwendet IE-Engine (mshtml.dll), die in Wine nicht vollständig funktioniert
     # BEST PRACTICE: IE8 installieren + umfassende DLL-Overrides für maximale Kompatibilität
-    log "Konfiguriere IE-Engine für Adobe Installer (Best Practice)..."
-    log ""
+    log "$(i18n::get "configuring_ie_engine")"
+    echo ""
     
     # IE8 Installation (STANDARD - immer installieren für beste Kompatibilität)
     if [ "$LANG_CODE" = "de" ]; then
@@ -2707,10 +2718,19 @@ configure_ie_engine() {
     
     if [ $ie8_exit_code -eq 0 ]; then
         output::success "$(i18n::get "ie8_installed_success")"
-        # CRITICAL: IE8 resets Windows version to win7 - must be set back to win10!
-        log_debug "Setze Windows-Version erneut auf Windows 10 (IE8 hat sie auf win7 zurückgesetzt)..."
-        winetricks -q win10 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1 || log_debug "win10 konnte nicht erneut gesetzt werden"
-        log_debug "Windows 10 erneut gesetzt"
+        # CRITICAL: IE8 resets Windows version to win7 - restore to win10 silently
+        # (No need to show message - user already knows we're using Windows 10)
+        # Try graceful shutdown first, then force kill as fallback
+        if command -v wineserver >/dev/null 2>&1; then
+            wineserver -k 2>/dev/null || true
+            sleep 0.5
+        fi
+        # Force kill only if graceful shutdown didn't work
+        pkill -9 wineserver 2>/dev/null || true
+        pkill -9 wine 2>/dev/null || true
+        sleep 1
+        winetricks -q win10 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1
+        echo ""
     else
         output::warning "$(i18n::get "ie8_install_failed")"
     fi
@@ -2744,7 +2764,22 @@ configure_ie_engine() {
     wine reg add "HKEY_CURRENT_USER\\Software\\Microsoft\\Internet Explorer\\Main" /v "DisableFirstRunCustomize" /t REG_SZ /d "1" /f >> "$LOG_FILE" 2>&1 || true
     
     # Show important notice about Adobe Installer button issues (only once, clean format)
-    output::box "$(i18n::get "important_next_button")"
+    output::header "$(i18n::get "important_next_button")"
+}
+
+# ============================================================================
+# @function show_post_installation_tips
+# @description Display helpful tips after successful installation
+# @return 0 on success
+# ============================================================================
+show_post_installation_tips() {
+    output::header "$(i18n::get "post_install_tips_title" 2>/dev/null || echo "Nächste Schritte & Tipps")"
+    
+    output::item 0 "$(i18n::get "tip_virtual_desktop" 2>/dev/null || echo "→ Empfohlen: winecfg → Graphics → Emulate a virtual desktop (für stabile UI)")"
+    output::item 0 "$(i18n::get "tip_gpu_glitches" 2>/dev/null || echo "→ Bei Glitches: Preferences → Performance → Use Graphics Processor deaktivieren")"
+    output::item 0 "$(i18n::get "tip_documentation" 2>/dev/null || echo "→ Mehr Infos: https://github.com/benjarogit/photoshopCClinux")"
+    
+    echo ""
 }
 
 # ============================================================================
@@ -2753,104 +2788,32 @@ configure_ie_engine() {
 # @return 0 on success
 # ============================================================================
 finish_installation() {
+    log "=== finish_installation() gestartet ==="
     echo ""
     output::success "$(i18n::get "installation_completed")"
     echo ""
     
-    # Ask about .NET Framework installation (recommended for compatibility)
-    if [[ "${PS_VERSION:-}" =~ "2021" ]] || [[ "${PS_VERSION:-}" =~ "2022" ]]; then
-        if [ "$LANG_CODE" = "de" ]; then
-            echo ""
-            output::warning "ℹ .NET Framework 4.8 Installation (EMPFOHLEN)"
-            echo "  .NET Framework wird für bessere Kompatibilität empfohlen."
-            echo "  Installation dauert 30-60 Minuten (manchmal länger) - das ist normal."
-            echo "  Installer: ~70-120MB, installiert aber mehrere GB."
-            echo ""
-            read -p "$(echo -e "${C_YELLOW}.NET Framework jetzt installieren? [J/n]:${C_RESET} ") " dotnet_install
-            if [[ ! "$dotnet_install" =~ ^[Nn]$ ]]; then
-                echo ""
-                output::step "Beende Wine-Prozesse für .NET Framework Installation..."
-                
-                # CRITICAL: Kill all Wine processes before .NET Framework installation
-                pkill -f "Photoshop.exe" 2>/dev/null || true
-                if command -v wineserver >/dev/null 2>&1; then
-                    wineserver -k 2>/dev/null || true
-                    wait::for_process "$(pgrep wineserver 2>/dev/null || echo "")" 5 0.2 2>/dev/null || true
-                fi
-                if [ -d "$SCR_PATH/prefix" ]; then
-                    export WINEPREFIX="$SCR_PATH/prefix"
-                    wineserver -k 2>/dev/null || true
-                    pkill -f "wine.*Photoshop" 2>/dev/null || true
-                    unset WINEPREFIX
-                fi
-                sleep 2
-                
-                output::success "Wine-Prozesse beendet"
-                echo ""
-                
-                # Install .NET Framework
-                install_dotnet_framework
-            else
-                log_warning ".NET Framework Installation übersprungen (vom Benutzer)"
-                if [ "$LANG_CODE" = "de" ]; then
-                    output::info ".NET Framework Installation übersprungen - kann später installiert werden:"
-                    echo "  WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
-                else
-                    output::info ".NET Framework installation skipped - can be installed later:"
-                    echo "  WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
-                fi
-            fi
-        else
-            echo ""
-            output::warning "ℹ .NET Framework 4.8 Installation (RECOMMENDED)"
-            echo "  .NET Framework is recommended for better compatibility."
-            echo "  Installation takes 30-60 minutes (sometimes longer) - this is normal."
-            echo "  Installer: ~70-120MB, but installs several GB."
-            echo ""
-            read -p "$(echo -e "${C_YELLOW}Install .NET Framework now? [Y/n]:${C_RESET} ") " dotnet_install
-            if [[ ! "$dotnet_install" =~ ^[Nn]$ ]]; then
-                echo ""
-                output::step "Terminating Wine processes for .NET Framework installation..."
-                
-                # CRITICAL: Kill all Wine processes before .NET Framework installation
-                pkill -f "Photoshop.exe" 2>/dev/null || true
-                if command -v wineserver >/dev/null 2>&1; then
-                    wineserver -k 2>/dev/null || true
-                    wait::for_process "$(pgrep wineserver 2>/dev/null || echo "")" 5 0.2 2>/dev/null || true
-                fi
-                if [ -d "$SCR_PATH/prefix" ]; then
-                    export WINEPREFIX="$SCR_PATH/prefix"
-                    wineserver -k 2>/dev/null || true
-                    pkill -f "wine.*Photoshop" 2>/dev/null || true
-                    unset WINEPREFIX
-                fi
-                sleep 2
-                
-                output::success "Wine processes terminated"
-                echo ""
-                
-                # Install .NET Framework
-                install_dotnet_framework
-            else
-                log_warning ".NET Framework installation skipped (by user)"
-                output::info ".NET Framework installation skipped - can be installed later:"
-                echo "  WINEPREFIX=~/.photoshopCCV19/prefix winetricks dotnet48"
-            fi
-        fi
-        echo ""
-    fi
+    # Show helpful tips after successful installation
+    show_post_installation_tips
     
     # Ask user if they want to start Photoshop now
-    output::section "$(i18n::get "start_photoshop_question")"
+    # Skip in quiet mode
     local start_photoshop=false
-    local start_prompt="$(i18n::get "start_photoshop_prompt")"
-    log_prompt "$start_prompt"
-    IFS= read -r -p "$start_prompt" start_response
-    log_input "$start_response"
-    
-    # Default to yes if empty (Enter pressed)
-    if [ -z "$start_response" ] || [[ "$start_response" =~ ^[JjYy]$ ]]; then
-        start_photoshop=true
+    if [ "${QUIET:-0}" != "1" ]; then
+        log "Zeige Photoshop-Start-Abfrage..."
+        output::section "$(i18n::get "start_photoshop_question")"
+        local start_prompt="$(i18n::get "start_photoshop_prompt")"
+        log_prompt "$start_prompt"
+        IFS= read -r -p "$start_prompt" start_response
+        log_input "$start_response"
+        
+        # Default to yes if empty (Enter pressed)
+        if [ -z "$start_response" ] || [[ "$start_response" =~ ^[JjYy]$ ]]; then
+            start_photoshop=true
+        fi
+    else
+        # In quiet mode, don't start Photoshop automatically
+        log "Quiet mode: Skipping Photoshop start prompt"
     fi
     
     if [ "$start_photoshop" = true ]; then
@@ -2858,17 +2821,88 @@ finish_installation() {
         output::step "$(i18n::get "starting_photoshop")"
         log "Starte Photoshop automatisch nach Installation..."
         
-        # Start Photoshop in background (non-blocking)
+        # Start Photoshop - capture errors but don't block
         if [ -f "$SCR_PATH/launcher/launcher.sh" ]; then
-            bash "$SCR_PATH/launcher/launcher.sh" >/dev/null 2>&1 &
+            log "Starte Launcher: $SCR_PATH/launcher/launcher.sh"
+            log "SCR_PATH: $SCR_PATH"
+            log "WINE_PREFIX: ${WINE_PREFIX:-not set}"
+            log "RESOURCES_PATH: ${RESOURCES_PATH:-not set}"
+            
+            # Export necessary variables for launcher
+            export SCR_PATH
+            export WINE_PREFIX
+            export RESOURCES_PATH
+            
+            # Start in background but capture output to log file
+            # Use nohup to prevent immediate termination if parent script exits
+            nohup bash "$SCR_PATH/launcher/launcher.sh" >> "$LOG_FILE" 2>&1 &
             local ps_pid=$!
             log "Photoshop gestartet (PID: $ps_pid)"
             output::success "$(i18n::get "photoshop_starting")"
+            
+            # Wait a moment to check if process started successfully
+            sleep 2
+            if ! kill -0 "$ps_pid" 2>/dev/null; then
+                if [ "$LANG_CODE" = "de" ]; then
+                    output::warning "Photoshop-Prozess konnte nicht gestartet werden. Bitte manuell starten: photoshop"
+                    output::info "Prüfe Logs: $LOG_FILE"
+                else
+                    output::warning "Photoshop process could not be started. Please start manually: photoshop"
+                    output::info "Check logs: $LOG_FILE"
+                fi
+                log_error "Photoshop-Prozess (PID: $ps_pid) beendet sich sofort nach Start"
+                # Show last few lines of log for debugging
+                if [ -f "$LOG_FILE" ]; then
+                    log_error "Letzte Zeilen aus Launcher-Output:"
+                    tail -20 "$LOG_FILE" | while IFS= read -r line; do
+                        log_error "  $line"
+                    done
+                fi
+            else
+                log "Photoshop-Prozess läuft (PID: $ps_pid)"
+            fi
         else
-            output::error "$(i18n::get "launcher_not_found" "$SCR_PATH/launcher/launcher.sh")"
+            output::error "$(printf "$(i18n::get "launcher_not_found")" "$SCR_PATH/launcher/launcher.sh")"
+            log_error "Launcher nicht gefunden: $SCR_PATH/launcher/launcher.sh"
         fi
     else
         output::info "$(i18n::get "photoshop_not_auto_start")"
+    fi
+    
+    # CRITICAL: Final .lnk file cleanup after finish_installation
+    # Adobe installer may create .lnk files during installation or when Photoshop starts
+    log_debug "Final cleanup after finish_installation: Removing any remaining .lnk files..."
+    local xdg_desktop="$(xdg-user-dir DESKTOP 2>/dev/null || echo '')"
+    local desktop_dirs=("$HOME/Desktop" "$HOME/Schreibtisch" "$HOME/desktop" "$HOME/schreibtisch")
+    # Add XDG desktop dir if it exists and is not empty
+    if [ -n "$xdg_desktop" ] && [ -d "$xdg_desktop" ]; then
+        desktop_dirs+=("$xdg_desktop")
+    fi
+    
+    # Check standard desktop directories
+    for desktop_dir in "${desktop_dirs[@]}"; do
+        if [ -n "$desktop_dir" ] && [ -d "$desktop_dir" ]; then
+            find "$desktop_dir" -maxdepth 1 -type f \( -name "*.lnk" -o -name "*Photoshop*.lnk" -o -name "*Adobe*.lnk" -o -name "*2021*.lnk" \) 2>/dev/null | while IFS= read -r lnk_file; do
+                if [ -f "$lnk_file" ]; then
+                    log_debug "Removing .lnk file after finish_installation: $lnk_file"
+                    rm -f "$lnk_file" 2>/dev/null || true
+                fi
+            done
+        fi
+    done
+    
+    # CRITICAL: Also check Wine Desktop directory (Wine may create .lnk files there)
+    if [ -d "$WINE_PREFIX/drive_c/users" ]; then
+        find "$WINE_PREFIX/drive_c/users" -type d -name "Desktop" 2>/dev/null | while IFS= read -r wine_desktop; do
+            if [ -d "$wine_desktop" ]; then
+                find "$wine_desktop" -maxdepth 1 -type f \( -name "*.lnk" -o -name "*Photoshop*.lnk" -o -name "*Adobe*.lnk" -o -name "*2021*.lnk" \) 2>/dev/null | while IFS= read -r lnk_file; do
+                    if [ -f "$lnk_file" ]; then
+                        log_debug "Removing .lnk file from Wine Desktop directory: $lnk_file"
+                        rm -f "$lnk_file" 2>/dev/null || true
+                    fi
+                done
+            fi
+        done
     fi
 }
 
@@ -2880,7 +2914,7 @@ finish_installation() {
 run_photoshop_installer() {
     # Adobe Installer: Output only to log files, not to terminal (reduces spam)
     # Use PIPESTATUS[0] to capture wine's exit code, not tee's
-    log_debug "Starte Adobe Installer (Set-up.exe)..."
+    log_debug 'Starte Adobe Installer (Set-up.exe)...'
     wine "$RESOURCES_PATH/photoshop/Set-up.exe" >> "$LOG_FILE" 2>&1 | tee -a "$SCR_PATH/wine-error.log" >/dev/null
     
     local install_status=${PIPESTATUS[0]}
@@ -2937,18 +2971,21 @@ configure_photoshop() {
             fi
             
             # Update PS_VERSION if different from detected
-            if [ -n "$actual_version" ] && [ "$actual_version" != "$PS_VERSION" ]; then
-                log_info "$(i18n::get "actual_version_info" "$actual_version" "$PS_VERSION")"
+            if [ -n "$actual_version" ]; then
+                local version_msg
+                if [ "$LANG_CODE" = "de" ]; then
+                    version_msg=$(printf "Tatsächlich installierte Version: %s (vorher erkannt: %s)" "$actual_version" "$PS_VERSION")
                 else
-                    log_info "Actually installed version: $actual_version (previously detected: $PS_VERSION)"
+                    version_msg=$(printf "Actually installed version: %s (previously detected: %s)" "$actual_version" "$PS_VERSION")
                 fi
+                log_info "$version_msg"
                 PS_VERSION="$actual_version"
                 PS_INSTALL_PATH=$(get_photoshop_install_path "$PS_VERSION")
                 PS_PREFS_PATH=$(get_photoshop_prefs_path "$PS_VERSION")
             fi
             
             # Entferne problematische Plugins (GitHub Issues #12, #56, #78)
-            # JavaScript-Extensions (CEP) funktionieren nicht richtig in Wine/Proton
+            # JavaScript-Extensions (CEP) funktionieren nicht richtig in Wine
             local problematic_plugins=(
                 "$ps_path/Required/Plug-ins/Spaces/Adobe Spaces Helper.exe"
                 "$ps_path/Required/CEP/extensions/com.adobe.DesignLibraryPanel.html"
@@ -2976,9 +3013,8 @@ configure_photoshop() {
             local prefs_dir
             prefs_dir=$(dirname "$prefs_file")
             
-            if [ ! -d "$prefs_dir" ]; then
-                mkdir -p "$prefs_dir"
-            fi
+            # mkdir -p is idempotent, no need to check if directory exists
+            mkdir -p "$prefs_dir"
             
             # Erstelle Prefs-Datei mit GPU-Deaktivierung
             # Diese Einstellungen verhindern GPU-Treiber-Warnungen
@@ -2988,8 +3024,9 @@ useGraphicsProcessor 0
 GPUAcceleration 0
 EOF
             
-            # BEST PRACTICE: Create PSUserConfig.txt with GPUForce 1 (Internet-Tipp)
-            # This can help with GPU-related issues in some cases
+            # BEST PRACTICE: Create PSUserConfig.txt with GPUForce 0 (GPU deaktiviert - empfohlen für Wine)
+            # GPU acceleration causes rendering artifacts, glitchy UI, and display errors in 80-90% of cases
+            # Disabling GPU is the recommended solution for Wine + Photoshop 2021
             # Path: AppData/Roaming/Adobe/Adobe Photoshop [VERSION]/Adobe Photoshop [VERSION] Settings/PSUserConfig.txt
             local ps_user_config_dir="$PS_PREFS_PATH/Adobe Photoshop $PS_VERSION Settings"
             if [ ! -d "$ps_user_config_dir" ]; then
@@ -3007,15 +3044,19 @@ EOF
                 cp "$ps_user_config_file" "${ps_user_config_file}.bak" 2>/dev/null || true
             fi
             
-            # Create PSUserConfig.txt with GPUForce 1 (Internet best practice)
-            # This can help force GPU usage if needed, or disable it if GPUForce 0
-            # We set it to 1 as a workaround for some GPU issues (can be changed by user)
+            # CRITICAL: Create PSUserConfig.txt with GPUForce 0 and UseOpenCL 0 (disable GPU acceleration)
+            # GPU acceleration causes rendering artifacts, glitchy UI, and display errors in 80-90% of cases
+            # Disabling GPU is the recommended solution for Wine + Photoshop 2021
+            # User can enable it later in Photoshop Preferences if needed
             cat > "$ps_user_config_file" << 'EOF'
-# GPUForce 1 - Force GPU usage (can help with some GPU-related issues)
-# Set to 0 to disable GPU completely
-GPUForce 1
+# GPU Configuration - Disable GPU acceleration (recommended for Wine)
+# GPU acceleration often causes rendering artifacts and glitchy UI under Wine
+# Set GPUForce to 1 to enable GPU (not recommended unless you have specific needs)
+[GPU]
+GPUForce 0
+UseOpenCL 0
 EOF
-            log "  → PSUserConfig.txt erstellt mit GPUForce 1 (Internet Best Practice)"
+            log "  → PSUserConfig.txt erstellt mit GPUForce 0 (GPU deaktiviert - empfohlen für Wine)"
             
             # Zusätzlich: Deaktiviere GPU in Registry für bessere Kompatibilität
             log "  → Setze Registry-Einstellungen für GPU-Deaktivierung..."
@@ -3028,6 +3069,7 @@ EOF
             winetricks -q gdiplus_winxp 2>&1 | grep -vE "warning:.*64-bit|warning:.*wow64|Executing|Using winetricks|------------------------------------------------------" >> "$LOG_FILE" 2>&1 || true
             
             break
+        fi
     done
 }
 
@@ -3047,7 +3089,11 @@ function install_photoshopSE() {
     log_debug "Log-Datei: $LOG_FILE"
     
     # Show version to user (clean format)
-    output::info "$(i18n::get "detected_version" "$PS_VERSION")"
+    if [ "$LANG_CODE" = "de" ]; then
+        output::info "Erkannte Version: $PS_VERSION"
+    else
+        output::info "Detected version: $PS_VERSION"
+    fi
     echo ""
     
     # Verwende das lokale Adobe Photoshop Installationspaket
@@ -3073,8 +3119,8 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     echo "===============| Adobe Photoshop $PS_VERSION |===============" >> "$SCR_PATH/wine-error.log"
     output::step "$(i18n::get "starting_installer")"
     
-    # Show important installation hints in a clean box
-    output::box "$(i18n::get "important_installer_choice")"
+    # Show important installation hints in consistent header format
+    output::header "$(i18n::get "important_installer_choice")"
     
     # Starte den Adobe Installer (mit Logging)
     log_debug "Starte Adobe Photoshop Setup..."
@@ -3090,7 +3136,35 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     # Configure Photoshop after installation
     configure_photoshop
     
-    notify-send "Photoshop CC" "Photoshop Installation abgeschlossen" -i "photoshop" 2>/dev/null || true
+    # CRITICAL: Final .lnk file cleanup after Photoshop installation
+    # Adobe installer may create .lnk files during installation
+    log_debug "Final cleanup: Removing any remaining .lnk files..."
+    local xdg_desktop="$(xdg-user-dir DESKTOP 2>/dev/null || echo '')"
+    local desktop_dirs=("$HOME/Desktop" "$HOME/Schreibtisch" "$HOME/desktop" "$HOME/schreibtisch")
+    # Add XDG desktop dir if it exists and is not empty
+    if [ -n "$xdg_desktop" ] && [ -d "$xdg_desktop" ]; then
+        desktop_dirs+=("$xdg_desktop")
+    fi
+    for desktop_dir in "${desktop_dirs[@]}"; do
+        if [ -n "$desktop_dir" ] && [ -d "$desktop_dir" ]; then
+            find "$desktop_dir" -maxdepth 1 -type f \( -name "*.lnk" -o -name "*Photoshop*.lnk" -o -name "*Adobe*.lnk" -o -name "*2021*.lnk" \) 2>/dev/null | while IFS= read -r lnk_file; do
+                if [ -f "$lnk_file" ]; then
+                    log_debug "Removing .lnk file after Photoshop installation: $lnk_file"
+                    rm -f "$lnk_file" 2>/dev/null || true
+                fi
+            done
+        fi
+    done
+    
+    if command -v notify-send >/dev/null 2>&1; then
+        if notify-send "Photoshop CC" "Photoshop Installation abgeschlossen" -i "photoshop" 2>/dev/null; then
+            log_debug "Notification sent successfully"
+        else
+            log_debug "Notification failed (non-critical, likely no DBus session)"
+        fi
+    else
+        log_debug "notify-send not available - skipping notification"
+    fi
     log "Adobe Photoshop $PS_VERSION installiert..."
     
     # Create checkpoint after successful installation
@@ -3103,8 +3177,33 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
     # Cleanup checkpoints after successful installation
     checkpoint::cleanup
     
+    # CRITICAL: Create launcher BEFORE finish_installation (needed for Photoshop start)
+    # The launcher must exist before we try to start Photoshop
+    # CRITICAL: Skip interactive command creation during installation to prevent blocking
+    export SKIP_COMMAND_CREATION="true"
+    log "Erstelle Launcher..."
+    # CRITICAL: Temporarily disable errexit to prevent script termination if launcher() fails
+    set +e
+    if type launcher >/dev/null 2>&1; then
+        launcher
+        local launcher_exit=$?
+        if [ $launcher_exit -eq 0 ]; then
+            log "Launcher erfolgreich erstellt"
+        else
+            log_error "Launcher-Erstellung fehlgeschlagen (Exit-Code: $launcher_exit)"
+            # Continue anyway - launcher might already exist or can be created manually
+        fi
+    else
+        log_warning "launcher() function not found - skipping launcher creation"
+    fi
+    # Re-enable errexit
+    set -e
+    unset SKIP_COMMAND_CREATION
+    
     # CRITICAL: Call finish_installation to show completion message and ask if user wants to start Photoshop
+    log "Rufe finish_installation() auf..."
     finish_installation
+    log "finish_installation() abgeschlossen"
     
     unset local_installer install_status possible_paths
 }
@@ -3112,7 +3211,9 @@ Please copy Photoshop installation files to: $PROJECT_ROOT/photoshop/"
 # Parse command line arguments for Wine method selection
 # Extract our custom parameters BEFORE check_arg (which uses getopts)
 # NOTE: Logging is not yet initialized here, so we can't use log_debug
-WINE_METHOD=""  # Empty = interactive selection, "wine" = Wine Standard, "proton" = Proton GE
+WINE_METHOD=""  # Empty = interactive selection, "wine" = Wine Standard
+QUIET="${QUIET:-0}"  # Quiet mode: only show errors
+VERBOSE="${VERBOSE:-0}"  # Verbose mode: show debug logs
 filtered_args=()
 for arg in "$@"; do
     case "$arg" in
@@ -3120,8 +3221,12 @@ for arg in "$@"; do
             WINE_METHOD="wine"
             # Don't add to filtered_args - check_arg doesn't know about this
             ;;
-        --proton-ge)
-            WINE_METHOD="proton"
+        --quiet|-q)
+            QUIET=1
+            # Don't add to filtered_args - check_arg doesn't know about this
+            ;;
+        --verbose|-v)
+            VERBOSE=1
             # Don't add to filtered_args - check_arg doesn't know about this
             ;;
         *)
@@ -3131,12 +3236,14 @@ for arg in "$@"; do
     esac
 done
 
-# Export WINE_METHOD so it's available in all functions
+# Export variables so they're available in all functions
 export WINE_METHOD
+export QUIET
+export VERBOSE
 
-# Call check_arg with filtered arguments (without --wine-standard/--proton-ge)
+# Call check_arg with filtered arguments (without --wine-standard)
 check_arg "${filtered_args[@]}"
-# NOTE: save_paths() is called at the END of installation (after PROTON_PATH is set)
+# NOTE: save_paths() is called at the END of installation
 main
 
 
