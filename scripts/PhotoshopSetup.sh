@@ -813,16 +813,19 @@ detect_all_wine_versions() {
         ((index++))
     fi
     
-    # Priority 3: Standard Wine (Warnung bei Wine 10.x)
+    # Priority 3: Standard Wine (Warnung bei Wine 10.x, nicht bei 11.0+)
     if command -v wine &> /dev/null; then
         local version=$(wine --version 2>/dev/null | head -1 || echo "unknown")
         local wine_major_version=$(echo "$version" | grep -oE "wine-[0-9]+" | grep -oE "[0-9]+" | head -1 || echo "0")
         
         options+=("$index")
         local fallback_text=$(i18n::get "fallback")
-        if [ "$wine_major_version" -ge 10 ]; then
-            # Wine 10.x - Warnung hinzufügen
-            descriptions+=("Standard Wine: $version ($fallback_text) ⚠ Wine 10.x kann Probleme verursachen - Wine 9.x empfohlen")
+        if [ "$wine_major_version" -eq 10 ]; then
+            # Wine 10.x - Warnung hinzufügen (WoW64 experimentell)
+            descriptions+=("Standard Wine: $version ($fallback_text) ⚠ Wine 10.x kann Probleme verursachen - Wine 9.x oder 11.0+ empfohlen")
+        elif [ "$wine_major_version" -ge 11 ]; then
+            # Wine 11.0+ - WoW64 vollständig unterstützt, keine Warnung
+            descriptions+=("Standard Wine: $version ($fallback_text)")
         else
             descriptions+=("Standard Wine: $version ($fallback_text)")
         fi
